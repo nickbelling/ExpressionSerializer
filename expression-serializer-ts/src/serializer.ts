@@ -25,12 +25,6 @@ interface ParsedExpression {
     typeChecker: TypeChecker
 }
 
-enum StringType {
-    InterpolatedString = 0,
-    DoubleString = 1,
-    SingleString = 2,
-}
-
 function parseFunctionToArrowFunctionExpression<T>(fn: (x: T) => boolean): ParsedExpression {
     const functionString = fn.toString();
     const sourceFile = createSourceFile(
@@ -160,6 +154,9 @@ export function convertExpressionToODataString(
                 break;
             case SyntaxKind.SlashToken:
                 odataFilter += " div ";
+                break;
+            case SyntaxKind.PercentToken:
+                odataFilter += " mod ";
                 break;
 
             // Literals
@@ -313,9 +310,8 @@ export function convertExpressionToODataString(
                             odataFilter += `indexof(${propertyName}, ${args})`;
                             processed = true;
                             break;
-                        case 'replace':
-                            // Note: TypeScript's replace method might have different usage than OData's replace function.
-                            odataFilter += `replace(${propertyName}, ${args})`;
+                        case 'substring':
+                            odataFilter += `substring(${propertyName}, ${args})`;
                             processed = true;
                             break;
                         case 'toLowerCase':

@@ -56,7 +56,11 @@ describe('Expression Serializer', () => {
         checkResult<Person>(x => x.name.includes('ob'), "contains(name, 'ob')");
     });
 
-    it('should handle indexof', () => {
+    it('should handle substrings', () => {
+        checkResult<Person>(x => x.name.substring(2) == "Bo", "substring(name, 2) eq 'Bo'");
+    });
+
+    it('should handle string indexof', () => {
         checkResult<Person>(x => x.name.indexOf('B') == 0, "indexof(name, 'B') eq 0");
     });
 
@@ -79,6 +83,10 @@ describe('Expression Serializer', () => {
     it('should handle grouping', () => {
         checkResult<Customer>(c => c.person.age >= 18 || (c.isActive && c.person.age >= 16), 
         "person/age ge 18 or (isActive and person/age ge 16)");
+    });
+
+    it('should handle arithmetic', () => {
+        checkResult<Person>(x => (x.age + 2 * x.age - 5) > 5, "(age add 2 mul age sub 5) gt 5");
     });
 
     it('should handle nested properties', () => {
@@ -119,6 +127,10 @@ describe('Expression Serializer', () => {
 
     it('should handle array length', () => {
         checkResult<Item>(x => x.historicPrices.length > 5, "length(historicPrices) gt 5");
+    });
+
+    it('should handle array indexof', () => {
+        checkResult<Item>(x => x.historicPrices.indexOf(2) > 0, "indexof(historicPrices, 2) gt 0");
     });
 
     it('should handle "any" collections', () => {
