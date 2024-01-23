@@ -12,6 +12,8 @@ import {
     Program,
     SourceFile,
     SyntaxKind,
+    TemplateSpan,
+    TransformationContext,
     TransformerFactory,
     VisitResult,
     Visitor,
@@ -25,6 +27,7 @@ import {
     visitNode
 } from 'typescript';
 import { convertExpressionToODataString } from './serializer';
+import * as ts from 'typescript';
 
 // Function to check if the import is from 'serialize.ts'
 function isSerializeImport(importDeclaration: ImportDeclaration, sourceFile: SourceFile): boolean {
@@ -76,7 +79,7 @@ export function serializeTransformer(program: Program): TransformerFactory<Sourc
                         const odataString: string = 
                             convertExpressionToODataString(
                                 firstArgument as ArrowFunction, typeChecker);
-                        return factory.createStringLiteral(odataString);
+                        return createTemplateLiteral(odataString, context);
                     }
                 }
             }
@@ -87,4 +90,29 @@ export function serializeTransformer(program: Program): TransformerFactory<Sourc
         const transformedSourceFile = visitNode(sourceFile, visitor);
         return transformedSourceFile as SourceFile;
     };
+}
+
+
+function createTemplateLiteral(str: string, context: ts.TransformationContext): ts.Node {
+    // Check if the string contains interpolations
+    if (!str.includes('${')) {
+        // No interpolation, return as a no substitution template literal
+        return factory.createNoSubstitutionTemplateLiteral(str, str);
+    }
+
+    const parts = str.split(/\$\{(.*?)\}/);
+    let templateHead = parts.shift() ?? "";
+    const spans: ts.TemplateSpan[] = [];
+
+    while (parts.length > 0) {
+        const expressionText = parts.shift();
+        const literalText = parts.shift() ?? "";
+
+        const expression = expressionText ? factory.createIdentifier(expressionText) : factory.createIdentifier('');
+        const templatePart = parts.length > 0 ? factory.createTemplateMiddle(literalText, literalText) : factory.createTemplateTail(literalText, literalText);
+
+        spans.push(factory.createTemplateSpan(expression, templatePart));
+    }
+
+    return factory.createTemplateExpression(factory.createTemplateHead(templateHead, templateHead), spans);
 }

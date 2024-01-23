@@ -12,15 +12,23 @@ import {
     createSourceFile,
     ScriptTarget,
     isArrowFunction,
-    isFunctionExpression,
     createProgram,
     CompilerHost,
-    TypeChecker
+    TypeChecker,
+    isFunctionExpression,
+    PrefixUnaryExpression,
+    ParenthesizedExpression
 } from "typescript";
 
 interface ParsedExpression {
     expression: ArrowFunction | null;
     typeChecker: TypeChecker
+}
+
+enum StringType {
+    InterpolatedString = 0,
+    DoubleString = 1,
+    SingleString = 2,
 }
 
 function parseFunctionToArrowFunctionExpression<T>(fn: (x: T) => boolean): ParsedExpression {
@@ -95,11 +103,15 @@ export function convertExpressionToODataString(
         }
     }
 
-    const visitNode = (node: Node, parentNode?: Node): void => {
-        //consoleLogNode(node);
+    const visitNode = (
+        node: Node,
+        parentNode?: Node,
+        includeIdentifier: boolean = false): void => {
+
         let processed = false;
 
         switch (node.kind) {
+            // Binary comparison
             case SyntaxKind.GreaterThanToken:
                 odataFilter += " gt ";
                 break;
@@ -132,17 +144,100 @@ export function convertExpressionToODataString(
             case SyntaxKind.CloseParenToken:
                 odataFilter += ")";
                 break;
+            case SyntaxKind.ExclamationToken:
+                odataFilter += " not ";
+                break;
+
+            // Arithmetic operators
+            case SyntaxKind.PlusToken:
+                odataFilter += " add ";
+                break;
+            case SyntaxKind.MinusToken:
+                odataFilter += " sub ";
+                break;
+            case SyntaxKind.AsteriskToken:
+                odataFilter += " mul ";
+                break;
+            case SyntaxKind.SlashToken:
+                odataFilter += " div ";
+                break;
+
+            // Literals
+            case SyntaxKind.StringLiteral:
+                odataFilter += `'${(node as StringLiteral).text}'`;
+                break;
+            case SyntaxKind.NumericLiteral:
+                odataFilter += (node as NumericLiteral).text;
+                break;
+            case SyntaxKind.TrueKeyword:
+                odataFilter += "true";
+                break;
+            case SyntaxKind.FalseKeyword:
+                odataFilter += "false";
+                break;
+            case SyntaxKind.NullKeyword:
+            case SyntaxKind.UndefinedKeyword:
+                odataFilter += "null";
+                break;
+
+            // "not"
+            case SyntaxKind.PrefixUnaryExpression:
+                const prefixUnaryExpression = node as PrefixUnaryExpression;
+                if (prefixUnaryExpression.operator === SyntaxKind.ExclamationToken) {
+                    // Save the current state of odataFilter
+                    const saveOdataFilter = odataFilter; 
+                    odataFilter = '';
+
+                    // Process the operand of the unary expression
+                    visitNode(prefixUnaryExpression.operand, node, includeIdentifier);
+
+                    const operandFilter = odataFilter;
+                    odataFilter = `not ${operandFilter}`;
+
+                    // Restore the original state
+                    odataFilter = saveOdataFilter + odataFilter;
+                    processed = true;
+                }
+                break;
+
+            // Grouped with parentheses
+            case SyntaxKind.ParenthesizedExpression:
+                const parenthesizedExpression = node as ParenthesizedExpression;
+                odataFilter += "(";
+            
+                // Process the expression inside the parentheses
+                visitNode(parenthesizedExpression.expression, node, includeIdentifier);
+            
+                odataFilter += ")";
+                processed = true;
+                break;
+
+            // Property access
             case SyntaxKind.PropertyAccessExpression:
                 const propertyAccess = node as PropertyAccessExpression;
                 const object = propertyAccess.expression;
                 const property = propertyAccess.name;
-    
-                if (object.kind === SyntaxKind.Identifier && (object as Identifier).text === lambdaParameter) {
-                    odataFilter += property.text;
+            
+                if (property.text === 'length') {
+                    // Special handling for 'length' property
+                    const objectText = getNestedPropertyName(object, lambdaParameter, includeIdentifier);
+                    odataFilter += `length(${objectText})`;
                 } else {
-                    const objectText = object.kind === SyntaxKind.Identifier ? (object as Identifier).text : object.getText();
-                    odataFilter += `${objectText}.${property.text}`;
+                    // Handling for other property access expressions
+                    if (object.kind === SyntaxKind.Identifier && (object as Identifier).text === lambdaParameter) {
+                        if (includeIdentifier) {
+                            odataFilter += `${lambdaParameter}/${property.text}`;
+                        } else {
+                            odataFilter += property.text;
+                        }
+                    } else {
+                        // Use getNestedPropertyName for nested properties to format correctly
+                        const fullPropertyName = getNestedPropertyName(propertyAccess, lambdaParameter, includeIdentifier);
+                        odataFilter += fullPropertyName;
+                    }
                 }
+
+                processed = true;
                 break;
             case SyntaxKind.Identifier:
                 const identifier = node as Identifier;
@@ -155,33 +250,52 @@ export function convertExpressionToODataString(
                         const isStringType = typeChecker.typeToString(type) === 'string';
 
                         // Format the output based on type
-                        odataFilter += isStringType ? `
-                            "' + ${identifier.text} + '"` :
-                            `" + ${identifier.text} + "`;
+                        if (isStringType) {
+                            odataFilter += `'$\{${identifier.text}\}'`;
+                        } else {
+                            odataFilter += `$\{${identifier.text}\}`;
+                        }
                     }
                 }
                 break;
-            case SyntaxKind.StringLiteral:
-                odataFilter += `'${(node as StringLiteral).text}'`;
-                break;
-            case SyntaxKind.NumericLiteral:
-                odataFilter += (node as NumericLiteral).text;
-                break;
-            case SyntaxKind.NullKeyword:
-            case SyntaxKind.UndefinedKeyword:
-                odataFilter += "null";
-                break;
-
             // Handle functions
             case SyntaxKind.CallExpression:
                 const callExpression = node as CallExpression;
                 const methodName = callExpression.expression.getLastToken()?.getText();
-            
-                if (callExpression.expression.kind === SyntaxKind.PropertyAccessExpression) {
+                const args = callExpression.arguments.map(arg => arg.getText()).join(', '); // Get the arguments
+
+                if (isCollectionFunction(methodName)) {
                     const propertyAccess = callExpression.expression as PropertyAccessExpression;
-                    const propertyName = getNestedPropertyName(propertyAccess.expression, lambdaParameter!);
-                    const args = callExpression.arguments.map(arg => arg.getText()).join(', ');
-            
+                    const collectionName = getNestedPropertyName(propertyAccess.expression, lambdaParameter, includeIdentifier);
+                    const lambdaExpression = callExpression.arguments[0];
+        
+                    // Assuming the lambda expression is an arrow function
+                    if (isArrowFunction(lambdaExpression) || isFunctionExpression(lambdaExpression)) {
+                        // Capture the current lambda parameter and set it to the new one
+                        const originalLambdaParameter = lambdaParameter;
+                        lambdaParameter = lambdaExpression.parameters[0].name.getText();
+
+                        // Save the current state of odataFilter and reset it for building the lambda body
+                        const saveOdataFilter = odataFilter; 
+                        odataFilter = '';
+
+                        // Process the lambda body
+                        forEachChild(lambdaExpression.body, node => visitNode(node, undefined, true));
+
+                        // Build the OData filter string for the 'any' expression
+                        const lambdaBody = odataFilter;
+                        odataFilter = `${collectionName}/${convertCollectionFunction(methodName)}(${lambdaParameter}: ${lambdaBody})`;
+
+                        // Restore the original state
+                        odataFilter = saveOdataFilter + odataFilter;
+                        lambdaParameter = originalLambdaParameter;
+
+                        processed = true;
+                    }
+                } else if (callExpression.expression.kind == SyntaxKind.PropertyAccessExpression) {
+                    const propertyAccess = callExpression.expression as PropertyAccessExpression;
+                    const propertyName = getNestedPropertyName(propertyAccess.expression, lambdaParameter, includeIdentifier);
+
                     switch (methodName) {
                         case 'startsWith':
                             odataFilter += `startswith(${propertyName}, ${args})`;
@@ -227,28 +341,19 @@ export function convertExpressionToODataString(
                             break;
                         // Add other cases here
                     }
+                } else {
+                    // Direct function call
+                    const expression = callExpression.expression.getText();
+                    odataFilter += `\${${expression}(${args})}`;
+                    processed = true; // Set the flag to true to avoid further processing
                 }
-                break;
-
-            // Handle arithmetic operators
-            case SyntaxKind.PlusToken:
-                odataFilter += " add ";
-                break;
-            case SyntaxKind.MinusToken:
-                odataFilter += " sub ";
-                break;
-            case SyntaxKind.AsteriskToken:
-                odataFilter += " mul ";
-                break;
-            case SyntaxKind.SlashToken:
-                odataFilter += " div ";
                 break;
 
             // Add more cases as needed
         }
 
         if (!processed) {
-            forEachChild(node, (child) => visitNode(child, node));
+            forEachChild(node, (child) => visitNode(child, node, includeIdentifier));
         }
     };
 
@@ -257,32 +362,34 @@ export function convertExpressionToODataString(
     return odataFilter;
 }
 
-function getNestedPropertyName(node: Node, lambdaParameter: string): string {
+function getNestedPropertyName(
+    node: Node,
+    lambdaParameter: string | null,
+    includeIdentifier: boolean): string {
     if (node.kind === SyntaxKind.PropertyAccessExpression) {
         const propertyAccess = node as PropertyAccessExpression;
-        if (propertyAccess.expression.kind === SyntaxKind.Identifier && 
-            (propertyAccess.expression as Identifier).text === lambdaParameter) {
-            // Base case: Direct property access on lambda parameter
-            return propertyAccess.name.text;
-        } else {
-            // Recursive case: Nested property access
-            const parentName = getNestedPropertyName(propertyAccess.expression, lambdaParameter);
-            return `${parentName}/${propertyAccess.name.text}`;
-        }
+        const parentName = getNestedPropertyName(propertyAccess.expression, lambdaParameter, includeIdentifier);
+        return parentName ? `${parentName}/${propertyAccess.name.text}` : propertyAccess.name.text;
+    } else if (node.kind === SyntaxKind.Identifier) {
+        // Check if the identifier is the lambda parameter
+        const identifier = node as Identifier;
+        return includeIdentifier ? identifier.text : '';
     }
     return '';
 }
 
-function consoleLogNode(node: Node) {
-    const nodeKind = SyntaxKind[node.kind];
-    let nodeText: string;
-
-    try {
-        nodeText = node.getText();
-    } catch (error) {
-        nodeText = "Error getting text representation";
-    }    
-
-    console.log("Node Kind:", nodeKind, "Node Text:", nodeText);
+function isCollectionFunction(functionName?: string): boolean {
+    return functionName === 'some' ||
+        functionName === 'every';
 }
 
+function convertCollectionFunction(functionName?: string): string {
+    switch (functionName) {
+        case 'some':
+            return 'any';
+        case 'every':
+            return 'all';
+        default:
+            throw new Error('Unknown collection function name.');
+    }
+}
