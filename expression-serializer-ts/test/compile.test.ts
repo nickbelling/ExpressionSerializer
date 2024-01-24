@@ -32,8 +32,8 @@ describe("Test transformer", () => {
         expectedOData: string
     ): void {
         const source = `
-            import { serialize } from './serialize';
-            const result = serialize(${expression.toString()});`;
+            import { serializeExpression } from './serialize';
+            const result = serializeExpression(${expression.toString()});`;
         const output = compile(source);
 
         expect(output).toContain(`const result = \`${expectedOData}\``);
@@ -45,9 +45,9 @@ describe("Test transformer", () => {
 
     it("should handle variables", () => {
         const source = `
-            import { serialize } from './serialize';
+            import { serializeExpression } from './serialize';
             const num: number = 30;
-            const result = serialize(x => x.age > num);`;
+            const result = serializeExpression(x => x.age > num);`;
         const output = compile(source);
 
         expect(output).toContain("const result = `age gt ${num}`");
@@ -55,12 +55,12 @@ describe("Test transformer", () => {
 
     it("should handle function calls", () => {
         const source = `
-            import { serialize } from './serialize';
+            import { serializeExpression } from './serialize';
             function someFunction(num: number): number {
                 return num;
             }
             const num: number = 50;
-            const result = serialize(x => x.age <= someFunction(num));`;
+            const result = serializeExpression(x => x.age <= someFunction(num));`;
         const output = compile(source);
 
         expect(output).toContain("const result = `age le ${someFunction(num)}`");
@@ -68,12 +68,12 @@ describe("Test transformer", () => {
 
     it('should handle collections', () => {
         const source = `
-            import { serialize } from './serialize';
+            import { serializeExpression } from './serialize';
             function someFunction(num: number): number {
                 return num;
             }
             const num: number = 50;
-            const result = serialize(x => 
+            const result = serializeExpression(x => 
                 x.items.some(i => i.currentPrice <= someFunction(num)));`;
         const output = compile(source);
 

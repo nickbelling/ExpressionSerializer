@@ -1,76 +1,13 @@
 import {
-    SyntaxKind,
-    PropertyAccessExpression,
-    Identifier,
-    StringLiteral,
-    NumericLiteral,
-    CallExpression,
-    forEachChild,
-    ArrowFunction,
-    Node,
-    createSourceFile,
-    ScriptTarget,
-    isArrowFunction,
-    createProgram,
-    CompilerHost,
-    TypeChecker,
-    isFunctionExpression,
-    PrefixUnaryExpression,
-    ParenthesizedExpression
-} from "typescript";
+    ArrowFunction, CallExpression, CompilerHost, createProgram, createSourceFile, forEachChild,
+    Identifier, isArrowFunction, isFunctionExpression, Node, NumericLiteral,
+    ParenthesizedExpression, PrefixUnaryExpression, PropertyAccessExpression, ScriptTarget,
+    StringLiteral, SyntaxKind, TypeChecker
+} from 'typescript';
 
 interface ParsedExpression {
     expression: ArrowFunction | null;
     typeChecker: TypeChecker
-}
-
-function parseFunctionToArrowFunctionExpression<T>(fn: (x: T) => boolean): ParsedExpression {
-    const functionString = fn.toString();
-    const sourceFile = createSourceFile(
-        'tempFile.ts',
-        functionString,
-        ScriptTarget.Latest,
-        true /* setParentNodes */
-    );
-
-    const host: CompilerHost = {
-        getSourceFile: (fileName) => fileName === 'tempFile.ts' ? sourceFile : undefined,
-        getDefaultLibFileName: () => 'lib.d.ts',
-        writeFile: () => {},
-        getCurrentDirectory: () => '/',
-        getDirectories: () => [],
-        getCanonicalFileName: fileName => fileName,
-        useCaseSensitiveFileNames: () => true,
-        getNewLine: () => '\n',
-        fileExists: fileName => fileName === 'tempFile.ts',
-        readFile: () => '',
-        directoryExists: () => true,
-        getEnvironmentVariable: () => ''
-    };
-
-    const program = createProgram(
-        ['tempFile.ts'],
-        {
-            noResolve: true,
-            target: ScriptTarget.Latest
-        }, host);
-    const typeChecker = program.getTypeChecker();
-
-    // Traverse the AST to find the ArrowFunction
-    let arrowFunctionNode: ArrowFunction | null = null;
-    function visit(node: Node) {
-        if (isArrowFunction(node)) {
-            arrowFunctionNode = node as ArrowFunction;
-        } else {
-            forEachChild(node, visit);
-        }
-    }
-    forEachChild(sourceFile, visit);
-
-    return {
-        expression: arrowFunctionNode,
-        typeChecker: typeChecker
-    };
 }
 
 export function convertFuncToODataString<T>(func: (x: T) => boolean): string {
@@ -90,7 +27,7 @@ export function convertExpressionToODataString(
     let lambdaParameter: string | undefined = undefined;
 
     if (expression.kind === SyntaxKind.ArrowFunction) {
-        const arrowFunction = expression as ArrowFunction;    
+        const arrowFunction = expression as ArrowFunction;
         if (arrowFunction.parameters.length > 0) {
             lambdaParameter = arrowFunction.parameters[0].name.getText();
         }
@@ -105,11 +42,11 @@ export function convertExpressionToODataString(
 
         if (binaryOperatorKinds.includes(node.kind)) {
             // >, <, >=, <=, ==, etc
-            odataFilter += processBinaryOperator(node);
+            odataFilter += ` ${processBinaryOperator(node)} `;
             processed = true;
         } else if (arithmeticOperatorKinds.includes(node.kind)) {
             // +, -, /, *, %, etc
-            odataFilter += processArithmeticOperator(node);
+            odataFilter += ` ${processArithmeticOperator(node)} `;
             processed = true;
         } else if (literalOperatorKinds.includes(node.kind)) {
             // "string", 123, true, false, undefined, null, etc
@@ -120,7 +57,7 @@ export function convertExpressionToODataString(
             const prefixUnaryExpression = node as PrefixUnaryExpression;
             if (prefixUnaryExpression.operator === SyntaxKind.ExclamationToken) {
                 // Save the current state of odataFilter
-                const saveOdataFilter = odataFilter; 
+                const saveOdataFilter = odataFilter;
                 odataFilter = '';
 
                 // Process the operand of the unary expression
@@ -137,10 +74,10 @@ export function convertExpressionToODataString(
             // groupings
             const parenthesizedExpression = node as ParenthesizedExpression;
             odataFilter += "(";
-        
+
             // Process the expression inside the parentheses
             visitNode(parenthesizedExpression.expression, node, includeIdentifier);
-        
+
             odataFilter += ")";
             processed = true;
         } else if (node.kind === SyntaxKind.PropertyAccessExpression) {
@@ -148,7 +85,7 @@ export function convertExpressionToODataString(
             const propertyAccess = node as PropertyAccessExpression;
             const object = propertyAccess.expression;
             const property = propertyAccess.name;
-        
+
             if (property.text === 'length') {
                 // Special handling for 'length' property on a string/array, which in OData becomes a "length()"
                 // function call
@@ -182,7 +119,7 @@ export function convertExpressionToODataString(
                 const propertyAccess = callExpression.expression as PropertyAccessExpression;
                 const collectionName = getNestedPropertyName(propertyAccess.expression, lambdaParameter, includeIdentifier);
                 const lambdaExpression = callExpression.arguments[0];
-    
+
                 // Assuming the lambda expression is an arrow function
                 if (isArrowFunction(lambdaExpression) || isFunctionExpression(lambdaExpression)) {
                     // Capture the current lambda parameter and set it to the new one
@@ -190,7 +127,7 @@ export function convertExpressionToODataString(
                     lambdaParameter = lambdaExpression.parameters[0].name.getText();
 
                     // Save the current state of odataFilter and reset it for building the lambda body
-                    const saveOdataFilter = odataFilter; 
+                    const saveOdataFilter = odataFilter;
                     odataFilter = '';
 
                     // Process the lambda body
@@ -234,6 +171,55 @@ export function convertExpressionToODataString(
     return odataFilter;
 }
 
+function parseFunctionToArrowFunctionExpression<T>(fn: (x: T) => boolean): ParsedExpression {
+    const functionString = fn.toString();
+    const sourceFile = createSourceFile(
+        'tempFile.ts',
+        functionString,
+        ScriptTarget.Latest,
+        true /* setParentNodes */
+    );
+
+    const host: CompilerHost = {
+        getSourceFile: (fileName) => fileName === 'tempFile.ts' ? sourceFile : undefined,
+        getDefaultLibFileName: () => 'lib.d.ts',
+        writeFile: () => { },
+        getCurrentDirectory: () => '/',
+        getDirectories: () => [],
+        getCanonicalFileName: fileName => fileName,
+        useCaseSensitiveFileNames: () => true,
+        getNewLine: () => '\n',
+        fileExists: fileName => fileName === 'tempFile.ts',
+        readFile: () => '',
+        directoryExists: () => true,
+        getEnvironmentVariable: () => ''
+    };
+
+    const program = createProgram(
+        ['tempFile.ts'],
+        {
+            noResolve: true,
+            target: ScriptTarget.Latest
+        }, host);
+    const typeChecker = program.getTypeChecker();
+
+    // Traverse the AST to find the ArrowFunction
+    let arrowFunctionNode: ArrowFunction | null = null;
+    function visit(node: Node) {
+        if (isArrowFunction(node)) {
+            arrowFunctionNode = node as ArrowFunction;
+        } else {
+            forEachChild(node, visit);
+        }
+    }
+    forEachChild(sourceFile, visit);
+
+    return {
+        expression: arrowFunctionNode,
+        typeChecker: typeChecker
+    };
+}
+
 function getNestedPropertyName(
     node: Node,
     lambdaParameter: string | undefined,
@@ -271,29 +257,29 @@ function processBinaryOperator(node: Node): string {
     switch (node.kind) {
         // Binary comparison
         case SyntaxKind.GreaterThanToken:
-            return " gt ";
+            return "gt";
         case SyntaxKind.GreaterThanEqualsToken:
-            return " ge ";
+            return "ge";
         case SyntaxKind.LessThanToken:
-            return " lt ";
+            return "lt";
         case SyntaxKind.LessThanEqualsToken:
-            return " le ";
+            return "le";
         case SyntaxKind.EqualsEqualsToken:
         case SyntaxKind.EqualsEqualsEqualsToken:
-            return" eq ";
+            return "eq";
         case SyntaxKind.ExclamationEqualsToken:
         case SyntaxKind.ExclamationEqualsEqualsToken:
-            return" ne ";
+            return "ne";
         case SyntaxKind.AmpersandAmpersandToken:
-            return " and ";
+            return "and";
         case SyntaxKind.BarBarToken:
-            return " or ";
+            return "or";
         case SyntaxKind.OpenParenToken:
             return "(";
         case SyntaxKind.CloseParenToken:
             return ")";
         case SyntaxKind.ExclamationToken:
-            return" not ";
+            return "not";
         default:
             throw new Error(`Unhandled Binary Operator: ${SyntaxKind[node.kind]}.`);
     }
@@ -310,15 +296,15 @@ const arithmeticOperatorKinds: SyntaxKind[] = [
 function processArithmeticOperator(node: Node): string {
     switch (node.kind) {
         case SyntaxKind.PlusToken:
-            return " add ";
+            return "add";
         case SyntaxKind.MinusToken:
-            return " sub ";
+            return "sub";
         case SyntaxKind.AsteriskToken:
-            return " mul ";
+            return "mul";
         case SyntaxKind.SlashToken:
-            return " div ";
+            return "div";
         case SyntaxKind.PercentToken:
-            return " mod ";
+            return "mod";
         default:
             throw new Error(`Unhandled Arithmetic Operator: ${SyntaxKind[node.kind]}.`);
     }
@@ -352,8 +338,7 @@ function processLiteralOperator(node: Node) {
 }
 
 /**
- * Handles an identifier (i.e. a reference to a variable), in which case we'll
- * make it an interpolated string parameter.
+ * Handles an identifier (i.e. a reference to a variable), in which case we'll make it an interpolated string parameter.
  */
 function processIdentifier(
     node: Node,
@@ -397,6 +382,14 @@ const methodCallNames: string[] = [
     'trim'
 ];
 
+/**
+ * Handles a method call on a property. Converts it to the appropriate OData syntax (e.g. "someString.startsWith('x')"
+ * in TypeScript becomes "startsWith(someString, 'x')" in OData).
+ * @param methodName The name of the method being called.
+ * @param propertyName The name of the property this method affects (usually a string or an array).
+ * @param args Arguments to the method. For the most part, the OData method args align with the TypeScript ones.
+ * @returns 
+ */
 function processMethodCall(methodName: string, propertyName: string, args: string): string {
     switch (methodName) {
         case 'startsWith':
