@@ -6,7 +6,7 @@ import {
     createSourceFile,
     transform,
 } from "typescript";
-import { serializeTransformer } from "../src/transformer";
+import { serializeTransformer } from "./../build-tools/transformer";
 import { Person } from "./model";
 
 describe("Test transformer", () => {
@@ -50,6 +50,7 @@ describe("Test transformer", () => {
             const result = serializeExpression(x => x.age > num);`;
         const output = compile(source);
 
+        console.log('Transformed output:\n', output);
         expect(output).toContain("const result = `age gt ${num}`");
     });
 

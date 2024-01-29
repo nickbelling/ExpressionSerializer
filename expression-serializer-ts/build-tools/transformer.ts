@@ -1,12 +1,12 @@
-import { dirname, extname, normalize, resolve } from 'path';
+import { dirname, normalize, resolve } from 'path';
 import {
     ArrowFunction, Expression, factory, ImportDeclaration, isCallExpression, isIdentifier,
-    isImportDeclaration, isNamedImports, isStringLiteral, Node, Program, resolveModuleName, SourceFile, SyntaxKind,
+    isImportDeclaration, isNamedImports, isStringLiteral, Node, Program, SourceFile, SyntaxKind,
     TemplateSpan, TransformerFactory, visitEachChild, visitNode, Visitor,
     VisitResult
 } from 'typescript';
 
-import { serializeExpression } from './serialize';
+import { serializeExpression } from '../src/serialize';
 import { convertExpressionToODataString } from './serializer';
 
 const MODULE_NAME: string = 'expression-serializer-ts';
@@ -23,7 +23,9 @@ export function serializeTransformer(program: Program): TransformerFactory<Sourc
     const typeChecker = program.getTypeChecker();
 
     return context => sourceFile => {
+        let sourceFileModified = false;
         let serializeImportedAs: string | null = null;
+        console.log('Processing source file:', sourceFile.fileName);
 
         // Function to visit nodes recursively
         const visitor: Visitor = (node: Node): VisitResult<Node> => {
@@ -38,8 +40,13 @@ export function serializeTransformer(program: Program): TransformerFactory<Sourc
                             if (element.propertyName) {
                                 serializeImportedAs = element.propertyName.text;
                             }
+                            console.error('serializeImportedAs', serializeImportedAs);
+                        } else {
+                            console.error('line 46');
                         }
                     });
+                } else {
+                    console.error('line 50');
                 }
             }
 
@@ -55,7 +62,10 @@ export function serializeTransformer(program: Program): TransformerFactory<Sourc
                         const odataString: string = 
                             convertExpressionToODataString(
                                 firstArgument as ArrowFunction, typeChecker);
-                        return createTemplateLiteral(odataString);
+                        console.error("ODATA:", odataString);
+                        const literal = createTemplateLiteral(odataString);
+                        sourceFileModified = true;
+                        return literal;
                     }
                 }
             }
@@ -64,6 +74,10 @@ export function serializeTransformer(program: Program): TransformerFactory<Sourc
         };
 
         const transformedSourceFile = visitNode(sourceFile, visitor);
+
+        if (sourceFileModified) {
+            console.log('MODIFIED SOURCE FILE:', sourceFile.fileName);
+        }
         return transformedSourceFile as SourceFile;
     };
 }
@@ -81,7 +95,11 @@ function isSerializeExpressionFunctionImport(
 
     if (isStringLiteral(moduleSpecifier)) {
         const importPath = getFullPath(moduleSpecifier.text, sourceFile.fileName, program);
-        return importPath.includes(MODULE_NAME);
+        const includes = importPath.includes(MODULE_NAME);
+        if (includes) {
+            console.log('Found serializeExpression import path:', importPath, 'in source file:', sourceFile.fileName);
+        }
+        return includes;
     }
     
     return false;

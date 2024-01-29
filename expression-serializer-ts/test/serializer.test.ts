@@ -1,4 +1,4 @@
-import { convertFuncToODataString } from '../src/serializer';
+import { convertFuncToODataString } from './../build-tools/serializer';
 import { Person, Customer, Item, Order } from './model';
 
 function checkResult<T>(
