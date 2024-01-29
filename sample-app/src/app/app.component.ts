@@ -1,6 +1,5 @@
 import { Component } from '@angular/core';
 import { serializeExpression } from 'expression-serializer-ts';
-import { keys } from 'ts-transformer-keys';
 
 interface Person {
   name: string;

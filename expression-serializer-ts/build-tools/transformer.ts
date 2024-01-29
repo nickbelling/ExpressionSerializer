@@ -6,7 +6,7 @@ import {
     VisitResult
 } from 'typescript';
 
-import { serializeExpression } from '../src/serialize';
+import { serializeExpression } from './../src/serialize';
 import { convertExpressionToODataString } from './serializer';
 
 const MODULE_NAME: string = 'expression-serializer-ts';
@@ -19,13 +19,17 @@ const METHOD_NAME: string = 'serializeExpression';
  * @returns A {@link TransformerFactory<SourceFile>} capable of intercepting calls to {@link serializeExpression} and
  * converting them to OData $filter strings at compile-time.
  */
-export function serializeTransformer(program: Program): TransformerFactory<SourceFile> {
+export function serializeExpressionTransformer(program: Program): TransformerFactory<SourceFile> {
     const typeChecker = program.getTypeChecker();
 
     return context => sourceFile => {
+        console.debug(`Inspecting file '${sourceFile.fileName}' for ${METHOD_NAME} transformers...`);
+
         let sourceFileModified = false;
+        const modifiedDescriptions: [string, string][] = [];
+
+        // The "serializeExpression" function might be imported as an alias. If so, store it here.
         let serializeImportedAs: string | null = null;
-        console.log('Processing source file:', sourceFile.fileName);
 
         // Function to visit nodes recursively
         const visitor: Visitor = (node: Node): VisitResult<Node> => {
@@ -40,13 +44,15 @@ export function serializeTransformer(program: Program): TransformerFactory<Sourc
                             if (element.propertyName) {
                                 serializeImportedAs = element.propertyName.text;
                             }
-                            console.error('serializeImportedAs', serializeImportedAs);
+                            console.log('serializeImportedAs:', serializeImportedAs);
                         } else {
-                            console.error('line 46');
+                            throw new Error(`Identified import as ${element.name.text}, which didn't seem to be ` + 
+                                `'${METHOD_NAME}'. This may be benign - needs testing.`);
                         }
                     });
                 } else {
-                    console.error('line 50');
+                    throw new Error(`Identified a serializeExpression function import, but either it wasn't an ` +
+                        `importClause, or its bindings are unexpected. ${JSON.stringify(node)}`);
                 }
             }
 
@@ -59,15 +65,22 @@ export function serializeTransformer(program: Program): TransformerFactory<Sourc
                     // Assuming the first argument is the lambda expression
                     const firstArgument: Expression = node.arguments[0];
                     if (firstArgument && firstArgument.kind == SyntaxKind.ArrowFunction) {
+                        
+                        const lambdaString: string = firstArgument.getText();
                         const odataString: string = 
                             convertExpressionToODataString(
                                 firstArgument as ArrowFunction, typeChecker);
-                        console.error("ODATA:", odataString);
-                        const literal = createTemplateLiteral(odataString);
+                        modifiedDescriptions.push([lambdaString, odataString]);
+
                         sourceFileModified = true;
+
+                        const literal = createTemplateLiteral(odataString);
                         return literal;
+                    } else {
+                        throw new Error(`Called a serializeExpression function, but the first argument was not ` + 
+                            `an ArrowFunction.`);
                     }
-                }
+                } // else another function, we're not interested
             }
 
             return visitEachChild(node, visitor, context);
@@ -76,8 +89,12 @@ export function serializeTransformer(program: Program): TransformerFactory<Sourc
         const transformedSourceFile = visitNode(sourceFile, visitor);
 
         if (sourceFileModified) {
-            console.log('MODIFIED SOURCE FILE:', sourceFile.fileName);
+            console.log(`Modified source file '${sourceFile.fileName}' with the following replacements:`);
+            modifiedDescriptions.forEach(d => {
+                console.log(`- "serializeExpression(${d[0]})" converted to OData string "${d[1]}"`);
+            });
         }
+
         return transformedSourceFile as SourceFile;
     };
 }

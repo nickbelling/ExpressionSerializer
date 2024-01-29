@@ -6,8 +6,7 @@ import {
     createSourceFile,
     transform,
 } from "typescript";
-import { serializeTransformer } from "./../build-tools/transformer";
-import { Person } from "./model";
+import { serializeExpressionTransformer } from "./../build-tools/transformer";
 
 describe("Test transformer", () => {
     function compile(source: string): string {
@@ -20,27 +19,20 @@ describe("Test transformer", () => {
             );
 
         const result = transform(sourceFile, [
-            serializeTransformer(createProgram(["test.ts"], {})),
+            serializeExpressionTransformer(createProgram(["test.ts"], {})),
         ]);
 
         const printer = createPrinter();
         return printer.printFile(result.transformed[0]);
     }
 
-    function checkOData<T>(
-        expression: (x: T) => boolean,
-        expectedOData: string
-    ): void {
+    it("should handle binary comparisons", () => {
         const source = `
             import { serializeExpression } from './serialize';
-            const result = serializeExpression(${expression.toString()});`;
+            const result = serializeExpression(x => x.age > 10);
+        `;
         const output = compile(source);
-
-        expect(output).toContain(`const result = \`${expectedOData}\``);
-    }
-
-    it("should handle binary comparisons", () => {
-        checkOData<Person>((x) => x.age > 10, "age gt 10");
+        expect(output).toContain("const result = `age gt 10`");
     });
 
     it("should handle variables", () => {
@@ -79,5 +71,38 @@ describe("Test transformer", () => {
         const output = compile(source);
 
         expect(output).toContain("const result = `items/any(i: i/currentPrice le ${someFunction(num)})`");
+    });
+
+    it('should handle various arrow function formatting', () => {
+        const source = `
+            import { serializeExpression } from './serialize';
+            interface Person {
+                name: string;
+                age: number;
+            }
+
+            const result = serializeExpression<Person>((x: Person) => x.age > 10);
+        `;
+
+        const output = compile(source);
+        expect(output).toContain("const result = `age gt 10`");
+    });
+
+    it('should handle function aliasing', () => {
+        const source = `
+            import { serializeExpression as se } from './serialize';
+            const result = se(x => x.age > 10);
+        `;
+        const output = compile(source);
+        expect(output).toContain("const result = `age gt 10`");
+    });
+
+    it('should handle module aliasing', () => {
+        const source = `
+            import * as se from './serialize';
+            const result = se.serializeExpression(x => x.age > 10);
+        `;
+        const output = compile(source);
+        expect(output).toContain("const result = `age gt 10`");
     });
 });
