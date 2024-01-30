@@ -73,7 +73,7 @@ describe("Test transformer", () => {
         expect(output).toContain("const result = `items/any(i: i/currentPrice le ${someFunction(num)})`");
     });
 
-    it('should handle various arrow function formatting', () => {
+    it('should handle type information in the arrow function', () => {
         const source = `
             import { serializeExpression } from './serialize';
             interface Person {
@@ -82,6 +82,23 @@ describe("Test transformer", () => {
             }
 
             const result = serializeExpression<Person>((x: Person) => x.age > 10);
+        `;
+
+        const output = compile(source);
+        expect(output).toContain("const result = `age gt 10`");
+    });
+
+    it('should handle different formatting styles in the arrow function', () => {
+        const source = `
+            import { serializeExpression } from './serialize';
+            interface Person {
+                name: string;
+                age: number;
+            }
+
+            const result = serializeExpression<Person>((x) => {
+                return x.age > 10
+            });
         `;
 
         const output = compile(source);

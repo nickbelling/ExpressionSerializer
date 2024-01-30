@@ -108,7 +108,9 @@ export function convertExpressionToODataString(
             processed = true;
         } else if (node.kind === SyntaxKind.Identifier) {
             // Identifier/variable/property
-            odataFilter += processIdentifier(node, typeChecker, lambdaParameter, parentNode);
+            if (nodeIsPartOfExpression(node, expression)) {
+                odataFilter += processIdentifier(node, typeChecker, lambdaParameter, parentNode);
+            }
         } else if (node.kind === SyntaxKind.CallExpression) {
             // Function calls
             const callExpression = node as CallExpression;
@@ -335,6 +337,17 @@ function processLiteralOperator(node: Node) {
         default:
             throw new Error(`Unhandled Literal Operator: ${SyntaxKind[node.kind]}.`);
     }
+}
+
+function nodeIsPartOfExpression(node: Node, lambdaExpression: ArrowFunction): boolean {
+    let currentNode: Node | undefined = node;
+    while (currentNode && currentNode !== lambdaExpression) {
+        if (currentNode === lambdaExpression.body) {
+            return true; // Node is part of the lambda expression body
+        }
+        currentNode = currentNode.parent;
+    }
+    return false; // Node is not part of the lambda expression body
 }
 
 /**

@@ -1,7 +1,7 @@
 import { dirname, normalize, resolve } from 'path';
 import {
-    ArrowFunction, Expression, factory, ImportDeclaration, isCallExpression, isIdentifier,
-    isImportDeclaration, isNamedImports, isStringLiteral, Node, Program, SourceFile, SyntaxKind,
+    ArrowFunction, CallExpression, Expression, factory, ImportDeclaration, isCallExpression, isIdentifier,
+    isImportDeclaration, isNamedImports, isNamespaceImport, isPropertyAccessExpression, isStringLiteral, NamespaceImport, Node, Program, SourceFile, SyntaxKind,
     TemplateSpan, TransformerFactory, visitEachChild, visitNode, Visitor,
     VisitResult
 } from 'typescript';
@@ -35,33 +35,46 @@ export function serializeExpressionTransformer(program: Program): TransformerFac
         const visitor: Visitor = (node: Node): VisitResult<Node> => {
             // Check import statements
             if (isImportDeclaration(node) && isSerializeExpressionFunctionImport(node, sourceFile, program)) {
-                // Find 'serialize' in the import clause
                 const importClause = node.importClause;
-                if (importClause && importClause.namedBindings && isNamedImports(importClause.namedBindings)) {
-                    importClause.namedBindings.elements.forEach(element => {
-                        if (element.name.text === METHOD_NAME) {
-                            serializeImportedAs = element.name.text;
-                            if (element.propertyName) {
-                                serializeImportedAs = element.propertyName.text;
-                            }
-                            console.log('serializeImportedAs:', serializeImportedAs);
+                if (importClause) {
+                    //console.log(`Inspecting import clause: ${importClause.getText()}`);
+                    
+                    if (importClause.namedBindings && isNamespaceImport(importClause.namedBindings)) {
+                        // Handle namespace imports (import * as Alias from '...')
+                        const namespaceImport = importClause.namedBindings as NamespaceImport;
+                        if (namespaceImport.name && isIdentifier(namespaceImport.name)) {
+                            serializeImportedAs = namespaceImport.name.text;
+                            //console.log(`Module imported as (namespace): ${serializeImportedAs}`);
                         } else {
-                            throw new Error(`Identified import as ${element.name.text}, which didn't seem to be ` + 
-                                `'${METHOD_NAME}'. This may be benign - needs testing.`);
+                            //console.log(`Expected namespace import name not found.`);
                         }
-                    });
-                } else {
-                    throw new Error(`Identified a serializeExpression function import, but either it wasn't an ` +
-                        `importClause, or its bindings are unexpected. ${JSON.stringify(node)}`);
-                }
+                    } else {
+                        //console.log(`Namespace import not matched. NamedBindings type: ${importClause.namedBindings?.kind}`);
+                    }
+                
+                    if (importClause.namedBindings && isNamedImports(importClause.namedBindings)) {
+                        // Handle direct imports (import { serializeExpression as Alias } from '...')
+                        importClause.namedBindings.elements.forEach(element => {
+                            if (element.propertyName?.text === METHOD_NAME || element.name.text === METHOD_NAME) {
+                                serializeImportedAs = element.name.text;
+                                //console.log(`serializeImportedAs set (named import): ${serializeImportedAs}`);
+                            }
+                        });
+                    } else {
+                        //console.log(`Named import not matched. NamedBindings: ${importClause.namedBindings?.getText()}`);
+                    }
+                }                
             }
 
             // Check for function calls
             if (isCallExpression(node)) {
+                //console.log(`Checking call expression: ${node.getText()}`);
                 const expression = node.expression;
 
                 // Check if the function being called is 'serializeExpression'
-                if (isIdentifier(expression) && expression.text === serializeImportedAs) {
+                if (isSerializeExpressionCall(node, serializeImportedAs)) {
+                    //console.log(`Found 'serializeExpression' call: ${node.getText()}`);
+
                     // Assuming the first argument is the lambda expression
                     const firstArgument: Expression = node.arguments[0];
                     if (firstArgument && firstArgument.kind == SyntaxKind.ArrowFunction) {
@@ -120,6 +133,33 @@ function isSerializeExpressionFunctionImport(
     }
     
     return false;
+}
+
+function isSerializeExpressionCall(node: Node, serializeImportedAs: string | null): node is CallExpression {
+
+    console.log(`isSerializeExpressionCall: Checking node ${node.getText()}, serializeImportedAs: ${serializeImportedAs}`);
+    let result: boolean;
+
+    if (!isCallExpression(node)) {
+        result = false;
+    } else {
+        const expression = node.expression;
+        if (isIdentifier(expression)) {
+            // Check for direct call (function aliasing)
+            result = expression.text === serializeImportedAs;
+        } else if (isPropertyAccessExpression(expression) && isIdentifier(expression.name)) {
+            // Check for module aliasing
+            result = expression.name.text === METHOD_NAME && 
+                isIdentifier(expression.expression) && 
+                expression.expression.text === serializeImportedAs;
+        } else {
+            result = false;
+        }
+    }
+    
+    // Log the final decision of the function
+    console.log(`isSerializeExpressionCall: Result for node ${node.getText()} is ${result}`);
+    return result;
 }
 
 /**
