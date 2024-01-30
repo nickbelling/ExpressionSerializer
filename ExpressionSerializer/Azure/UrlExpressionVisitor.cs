@@ -1,9 +1,9 @@
-﻿// Copyright (c) Microsoft Corporation. All rights reserved.
-// Licensed under the MIT License. See License.txt in the project root for license information.
-
-// NOTE: This has been copied out of the now-deprecated Microsoft.Rest.ClientRuntime.Azure package.
+﻿// NOTE: This has been copied out of the now-deprecated Microsoft.Rest.ClientRuntime.Azure package.
 // A public equivalent of this class has not made it to the newer Azure.Core packages.
 // As a result, this code should be considered battle-hardened and not editable.
+
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System.Globalization;
 using System.Linq.Expressions;

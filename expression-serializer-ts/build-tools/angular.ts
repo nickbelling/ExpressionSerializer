@@ -2,10 +2,42 @@ import { Configuration, WebpackPluginInstance } from 'webpack';
 import { BuilderProgram, CustomTransformers, Program, SourceFile, TransformerFactory } from 'typescript';
 import { serializeExpressionTransformer } from './transformer';
 
-function findAngularWebpackPlugin(webpackCfg: Configuration) {
-    return webpackCfg?.plugins?.find((plugin) => plugin?.constructor.name == 'AngularWebpackPlugin');
+/**
+ * Given a Webpack configuration that contains an AngularWebpackPlugin, injects a {@link serializeExpressionTransformer}
+ * into the Typescript transformer pipeline.
+ * @param config The webpack config, as defined in the custom webpack extension file when using the 
+ * `@angular-builders/custom-webpack` project.
+ * @returns The modified configuration for passing to subsequent steps if necessary.
+ */
+export function addSerializeExpressionTransformerToAngularPipeline(config: Configuration): Configuration {
+    // Find the AngularCompilerPlugin in the webpack configuration
+    const angularWebpackPlugin = findAngularWebpackPlugin(config);
+
+    if (!angularWebpackPlugin) {
+        throw new Error('Could not inject the typescript transformer: Webpack AngularWebpackPlugin not found');
+    }
+
+    console.debug('Adding serializeExpressionTransformer...');
+    addTransformerToAngularWebpackPlugin(angularWebpackPlugin, serializeExpressionTransformer);
+    return config;
 }
 
+/**
+ * Searches the given webpack config for the currently loaded AngularWebpackPlugin.
+ * @param webpackCfg The webpack configuration being searched for an AngularWebpackPlugin.
+ * @returns The AngularWebpackPlugin if found, otherwise undefined.
+ */
+function findAngularWebpackPlugin(webpackConfig: Configuration): WebpackPluginInstance | undefined {
+    return webpackConfig?.plugins?.find((plugin) =>
+        plugin?.constructor.name == 'AngularWebpackPlugin') as WebpackPluginInstance;
+}
+
+/**
+ * Adds the given TypeScript transformer to the AngularWebpackPlugin. Inserts it as the first "before" transformer,
+ * meaning it runs prior to any other TS transformer.
+ * @param plugin The discovered AngularWebpackPlugin.
+ * @param transformer The transformer to add to the Angular plugin's set of custom transformers.
+ */
 function addTransformerToAngularWebpackPlugin(
     plugin: WebpackPluginInstance,
     transformer: (program: Program) => TransformerFactory<SourceFile>): void {
@@ -42,17 +74,4 @@ function addTransformerToAngularWebpackPlugin(
 
         return originalFetchQuery.apply(plugin, [program, transformers, getExtraDependencies, onAfterEmit]);
     };
-}
-
-export function addSerializeExpressionTransformerToAngularPipeline(config: Configuration): Configuration {
-    // Find the AngularCompilerPlugin in the webpack configuration
-    const angularWebpackPlugin = findAngularWebpackPlugin(config);
-
-    if (!angularWebpackPlugin) {
-        throw new Error('Could not inject the typescript transformer: Webpack AngularWebpackPlugin not found');
-    }
-
-    console.debug('Adding serializeExpressionTransformer...');
-    addTransformerToAngularWebpackPlugin(angularWebpackPlugin, serializeExpressionTransformer);
-    return config;
 }

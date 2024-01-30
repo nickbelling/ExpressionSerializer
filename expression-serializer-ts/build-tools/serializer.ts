@@ -10,15 +10,13 @@ interface ParsedExpression {
     typeChecker: TypeChecker
 }
 
-export function convertFuncToODataString<T>(func: (x: T) => boolean): string {
-    const parsed: ParsedExpression = parseFunctionToArrowFunctionExpression(func);
-    if (parsed.expression) {
-        return convertExpressionToODataString(parsed.expression, parsed.typeChecker);
-    } else {
-        throw new Error(`Could not parse input "${func.toString()}" as an Expression.`);
-    }
-}
-
+/**
+ * Parses the TypeScript Abstract Syntax Tree for an {@link ArrowFunction} that accepts an object and returns a boolean
+ * (i.e. a lambda of `(T) => boolean`), and creates an OData `$filter` string.
+ * @param expression The lambda expression being converted to an OData string.
+ * @param typeChecker The TypeScript {@link Program}'s {@link TypeChecker}.
+ * @returns An OData `$filter` string representation of the provided lambda function.
+ */
 export function convertExpressionToODataString(
     expression: ArrowFunction,
     typeChecker: TypeChecker): string {
@@ -26,6 +24,10 @@ export function convertExpressionToODataString(
     let odataFilter: string = "";
     let lambdaParameter: string | undefined = undefined;
 
+    // Get the lambda parameter (e.g. the "x" part of `(x: MyObject) => x.Something == "Blah";`). We need this to
+    // determine which identifiers represent the object being passed into the function (as those aren't part of an OData
+    // string), as opposed to properties on that object (which WILL appear in the OData string) or external variables
+    // (which we will interpolate into the string at runtime).
     if (expression.kind === SyntaxKind.ArrowFunction) {
         const arrowFunction = expression as ArrowFunction;
         if (arrowFunction.parameters.length > 0) {
@@ -33,31 +35,34 @@ export function convertExpressionToODataString(
         }
     }
 
+    // Build the Visitor function. This traverses the AST for the expression and builds up the OData string.
     const visitNode = (
         node: Node,
         parentNode?: Node,
         includeIdentifier: boolean = false) => {
 
+        // Some nodes get converted into the string, others need to be visited themselves.
         let processed = false;
 
+        // Check the type of node we're currently looking at:
         if (binaryOperatorKinds.includes(node.kind)) {
-            // >, <, >=, <=, ==, etc
+            // Binary operator (e.g. >, <, >=, <=, ==, etc)
             odataFilter += ` ${processBinaryOperator(node)} `;
             processed = true;
         } else if (arithmeticOperatorKinds.includes(node.kind)) {
-            // +, -, /, *, %, etc
+            // Arithmetic operator (e.g. +, -, /, *, %, etc)
             odataFilter += ` ${processArithmeticOperator(node)} `;
             processed = true;
         } else if (literalOperatorKinds.includes(node.kind)) {
-            // "string", 123, true, false, undefined, null, etc
+            // In-code literal such as "string", 123, true, false, undefined, null, etc
             odataFilter += processLiteralOperator(node);
             processed = true;
         } else if (node.kind === SyntaxKind.PrefixUnaryExpression) {
-            // ![expression]
+            // "Not something" expression (e.g. ![expression])
             const prefixUnaryExpression = node as PrefixUnaryExpression;
             if (prefixUnaryExpression.operator === SyntaxKind.ExclamationToken) {
                 // Save the current state of odataFilter
-                const saveOdataFilter = odataFilter;
+                const oldOdataFilter = odataFilter;
                 odataFilter = '';
 
                 // Process the operand of the unary expression
@@ -67,11 +72,11 @@ export function convertExpressionToODataString(
                 odataFilter = `not ${operandFilter}`;
 
                 // Restore the original state
-                odataFilter = saveOdataFilter + odataFilter;
+                odataFilter = oldOdataFilter + odataFilter;
                 processed = true;
             }
         } else if (node.kind === SyntaxKind.ParenthesizedExpression) {
-            // groupings
+            // Parentheses
             const parenthesizedExpression = node as ParenthesizedExpression;
             odataFilter += "(";
 
@@ -94,48 +99,56 @@ export function convertExpressionToODataString(
             } else {
                 // Handling for other property access expressions
                 if (object.kind === SyntaxKind.Identifier && (object as Identifier).text === lambdaParameter) {
+                    // Accessing a flat property on the object of interest
                     if (includeIdentifier) {
+                        // Including the identifier (e.g. inside an "any(item: item/price gt 20)" sub-expression)
                         odataFilter += `${lambdaParameter}/${property.text}`;
                     } else {
+                        // Most likely scenario, just print the property name we're interested in
                         odataFilter += property.text;
                     }
                 } else {
-                    // Use getNestedPropertyName for nested properties to format correctly
+                    // Accessing a nested property on the object of interest, format it properly before printing
                     const fullPropertyName = getNestedPropertyName(propertyAccess, lambdaParameter, includeIdentifier);
                     odataFilter += fullPropertyName;
                 }
             }
             processed = true;
         } else if (node.kind === SyntaxKind.Identifier) {
-            // Identifier/variable/property
+            // Node is an Identifier/variable/property
             if (nodeIsPartOfExpression(node, expression)) {
                 odataFilter += processIdentifier(node, typeChecker, lambdaParameter, parentNode);
             }
+            // else likely typing information on the actual parameter part of the lambda (e.g. the "MyType" in
+            // "(x: MyType) => x.Blah == 123". We don't want to include anything that's not INSIDE the expression, so
+            // skip.
         } else if (node.kind === SyntaxKind.CallExpression) {
-            // Function calls
+            // Function calls. We support some of these, like .startsWith, toLower, .every, etc.
             const callExpression = node as CallExpression;
             const methodName = callExpression.expression.getLastToken()?.getText();
             const args = callExpression.arguments.map(arg => arg.getText()).join(', '); // Get the arguments
 
             if (collectionFunctionNames.includes(methodName!)) {
+                // This is a collection expression (e.g. "items.every(x => x.age > 5)" or "items.some(i => i == 1)".
+                // OData actually supports some of these.
                 const propertyAccess = callExpression.expression as PropertyAccessExpression;
                 const collectionName = getNestedPropertyName(propertyAccess.expression, lambdaParameter, includeIdentifier);
-                const lambdaExpression = callExpression.arguments[0];
+                const internalLambdaExpression = callExpression.arguments[0];
 
                 // Assuming the lambda expression is an arrow function
-                if (isArrowFunction(lambdaExpression) || isFunctionExpression(lambdaExpression)) {
+                if (isArrowFunction(internalLambdaExpression) || isFunctionExpression(internalLambdaExpression)) {
                     // Capture the current lambda parameter and set it to the new one
                     const originalLambdaParameter = lambdaParameter;
-                    lambdaParameter = lambdaExpression.parameters[0].name.getText();
+                    lambdaParameter = internalLambdaExpression.parameters[0].name.getText();
 
                     // Save the current state of odataFilter and reset it for building the lambda body
                     const saveOdataFilter = odataFilter;
                     odataFilter = '';
 
                     // Process the lambda body
-                    forEachChild(lambdaExpression.body, node => visitNode(node, undefined, true));
+                    forEachChild(internalLambdaExpression.body, node => visitNode(node, undefined, true));
 
-                    // Build the OData filter string for the 'any' expression
+                    // Build the OData filter string to represent the collection expression
                     const lambdaBody = odataFilter;
                     odataFilter = `${collectionName}/${getCollectionFunction(methodName)}(${lambdaParameter}: ${lambdaBody})`;
 
@@ -155,7 +168,8 @@ export function convertExpressionToODataString(
                     processed = true;
                 }
             } else {
-                // This is a direct function call to something 
+                // This is a direct function call to something, so we'll assume for now that it's calling something
+                // external here and we want to interpolate it into the final string.
                 const expression = callExpression.expression.getText();
                 odataFilter += `\${${expression}(${args})}`;
                 processed = true; // Set the flag to true to avoid further processing
@@ -165,7 +179,7 @@ export function convertExpressionToODataString(
         if (!processed) {
             // Continue processing further children of this node
             forEachChild(node, (child) => visitNode(child, node, includeIdentifier));
-        } // else we've converted this node into its equivalent
+        } // else we've converted this node into its OData equivalent
     };
 
     forEachChild(expression, visitNode);
@@ -173,6 +187,27 @@ export function convertExpressionToODataString(
     return odataFilter;
 }
 
+/**
+ * Given a function that accepts an argument of type T and returns a boolean (i.e. a filter function), converts it into
+ * a matching OData `$filter` string.
+ * 
+ * Note that this must be called in non-minified TypeScript code for the optimal effect, i.e. during the build process.
+ * Using this in a live JavaScript web environment will have unpredictable results.
+ */
+export function convertFuncToODataString<T>(func: (x: T) => boolean): string {
+    const parsed: ParsedExpression = parseFunctionToArrowFunctionExpression(func);
+    if (parsed.expression) {
+        return convertExpressionToODataString(parsed.expression, parsed.typeChecker);
+    } else {
+        throw new Error(`Could not parse input "${func.toString()}" as an Expression.`);
+    }
+}
+
+/**
+ * Given an {@link ArrowFunction}, parses it into a {@link ParsedExpression}.
+ * @param fn 
+ * @returns 
+ */
 function parseFunctionToArrowFunctionExpression<T>(fn: (x: T) => boolean): ParsedExpression {
     const functionString = fn.toString();
     const sourceFile = createSourceFile(
@@ -222,6 +257,17 @@ function parseFunctionToArrowFunctionExpression<T>(fn: (x: T) => boolean): Parse
     };
 }
 
+/**
+ * When a node is a {@link SyntaxKind.PropertyAccessExpression} of 1 or more levels, creates an OData string
+ * representing that property access. For example, in Typescript, you'd say "Order.Customer.DateOfBirth", which in OData
+ * would be "Order/Customer/DateOfBirth", or "Customer/DateOfBirth" (if "Order" is the object being inspected).
+ * @param node The Property Access expression, or equivalent identifier.
+ * @param lambdaParameter The lambda parameter (e.g. the "x" in "(x: MyObject) => x.IsTrue").
+ * @param includeIdentifier True if the identifier (i.e. lambdaParameter) should be included in the output. Generally
+ * this isn't the case, but should be if the identifier is a lambda of a collection expression such as any() or some()
+ * or includes().
+ * @returns The OData-compatible nested property name.
+ */
 function getNestedPropertyName(
     node: Node,
     lambdaParameter: string | undefined,
@@ -239,6 +285,7 @@ function getNestedPropertyName(
     return '';
 }
 
+// SyntaxKinds representing Binary operators (e.g. >, <, ==, !==, etc).
 const binaryOperatorKinds: SyntaxKind[] = [
     SyntaxKind.GreaterThanToken,
     SyntaxKind.GreaterThanEqualsToken,
@@ -255,6 +302,7 @@ const binaryOperatorKinds: SyntaxKind[] = [
     SyntaxKind.ExclamationToken
 ];
 
+/** Converts a node previously determined to be a binary operator into an OData operator. */
 function processBinaryOperator(node: Node): string {
     switch (node.kind) {
         // Binary comparison
@@ -287,6 +335,7 @@ function processBinaryOperator(node: Node): string {
     }
 }
 
+// SyntaxKinds representing Arithmetic operators (e.g. +, -, *, /, %, etc).
 const arithmeticOperatorKinds: SyntaxKind[] = [
     SyntaxKind.PlusToken,
     SyntaxKind.MinusToken,
@@ -295,6 +344,7 @@ const arithmeticOperatorKinds: SyntaxKind[] = [
     SyntaxKind.PercentToken
 ];
 
+/** Converts a node previously determined to be an arithmetic operator into an OData operator. */
 function processArithmeticOperator(node: Node): string {
     switch (node.kind) {
         case SyntaxKind.PlusToken:
@@ -312,6 +362,7 @@ function processArithmeticOperator(node: Node): string {
     }
 }
 
+// SyntaxKinds representing in-code literals (e.g. "string", 123, true, false, undefined, null)
 const literalOperatorKinds: SyntaxKind[] = [
     SyntaxKind.StringLiteral,
     SyntaxKind.NumericLiteral,
@@ -321,6 +372,7 @@ const literalOperatorKinds: SyntaxKind[] = [
     SyntaxKind.UndefinedKeyword
 ];
 
+/** Converts a node previously determined to be a literal operator into an OData operator. */
 function processLiteralOperator(node: Node) {
     switch (node.kind) {
         case SyntaxKind.StringLiteral:
@@ -339,6 +391,12 @@ function processLiteralOperator(node: Node) {
     }
 }
 
+/**
+ * Returns true if the given node is part of the lambda expression body (and not part of the parameter/arguments).
+ * @param node The node to inspect.
+ * @param lambdaExpression The lambda expression the node is a part of.
+ * @returns 
+ */
 function nodeIsPartOfExpression(node: Node, lambdaExpression: ArrowFunction): boolean {
     let currentNode: Node | undefined = node;
     while (currentNode && currentNode !== lambdaExpression) {
@@ -351,7 +409,8 @@ function nodeIsPartOfExpression(node: Node, lambdaExpression: ArrowFunction): bo
 }
 
 /**
- * Handles an identifier (i.e. a reference to a variable), in which case we'll make it an interpolated string parameter.
+ * Handles an external identifier (i.e. a reference to a variable outside of the lambda), in which case we'll make it an
+ * interpolated string parameter.
  */
 function processIdentifier(
     node: Node,
@@ -382,17 +441,20 @@ function processIdentifier(
     }
 }
 
+// Method names which are valid to be called on certain properties
 const methodCallNames: string[] = [
+    // strings
     'startsWith',
     'endsWith',
-    'includes',
-    'indexOf',
     'substring',
     'toLowerCase',
     'toLocaleLowerCase',
     'toUpperCase',
     'toLocaleUpperCase',
-    'trim'
+    'trim',
+    // strings and arrays
+    'includes',
+    'indexOf',
 ];
 
 /**
@@ -428,11 +490,17 @@ function processMethodCall(methodName: string, propertyName: string, args: strin
     }
 }
 
+// Method names which represent collection lambdas such as "any/all" in OData.
 const collectionFunctionNames: string[] = [
     'some',
     'every'
 ];
 
+/**
+ * Given a TypeScript collection function name, returns the matching OData collection function name.
+ * @param functionName The collection function name.
+ * @returns 
+ */
 function getCollectionFunction(functionName?: string): string {
     switch (functionName) {
         case 'some':

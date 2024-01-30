@@ -23,7 +23,7 @@ export function serializeExpressionTransformer(program: Program): TransformerFac
     const typeChecker = program.getTypeChecker();
 
     return context => sourceFile => {
-        console.debug(`Inspecting file '${sourceFile.fileName}' for ${METHOD_NAME} transformers...`);
+        // console.debug(`Inspecting file '${sourceFile.fileName}' for ${METHOD_NAME} transformers...`);
 
         let sourceFileModified = false;
         const modifiedDescriptions: [string, string][] = [];
@@ -37,19 +37,19 @@ export function serializeExpressionTransformer(program: Program): TransformerFac
             if (isImportDeclaration(node) && isSerializeExpressionFunctionImport(node, sourceFile, program)) {
                 const importClause = node.importClause;
                 if (importClause) {
-                    //console.log(`Inspecting import clause: ${importClause.getText()}`);
+                    // console.log(`Inspecting import clause: ${importClause.getText()}`);
                     
                     if (importClause.namedBindings && isNamespaceImport(importClause.namedBindings)) {
                         // Handle namespace imports (import * as Alias from '...')
                         const namespaceImport = importClause.namedBindings as NamespaceImport;
                         if (namespaceImport.name && isIdentifier(namespaceImport.name)) {
                             serializeImportedAs = namespaceImport.name.text;
-                            //console.log(`Module imported as (namespace): ${serializeImportedAs}`);
+                            // console.log(`Module imported as (namespace): ${serializeImportedAs}`);
                         } else {
-                            //console.log(`Expected namespace import name not found.`);
+                            // console.log(`Expected namespace import name not found.`);
                         }
                     } else {
-                        //console.log(`Namespace import not matched. NamedBindings type: ${importClause.namedBindings?.kind}`);
+                        // console.log(`Namespace import not matched. NamedBindings type: ${importClause.namedBindings?.kind}`);
                     }
                 
                     if (importClause.namedBindings && isNamedImports(importClause.namedBindings)) {
@@ -68,17 +68,16 @@ export function serializeExpressionTransformer(program: Program): TransformerFac
 
             // Check for function calls
             if (isCallExpression(node)) {
-                //console.log(`Checking call expression: ${node.getText()}`);
+                // console.log(`Checking call expression: ${node.getText()}`);
                 const expression = node.expression;
 
                 // Check if the function being called is 'serializeExpression'
                 if (isSerializeExpressionCall(node, serializeImportedAs)) {
-                    //console.log(`Found 'serializeExpression' call: ${node.getText()}`);
+                    // console.log(`Found 'serializeExpression' call: ${node.getText()}`);
 
-                    // Assuming the first argument is the lambda expression
+                    // Assuming the first argument to serializeExpression is the lambda expression we want to parse
                     const firstArgument: Expression = node.arguments[0];
                     if (firstArgument && firstArgument.kind == SyntaxKind.ArrowFunction) {
-                        
                         const lambdaString: string = firstArgument.getText();
                         const odataString: string = 
                             convertExpressionToODataString(
@@ -127,7 +126,7 @@ function isSerializeExpressionFunctionImport(
         const importPath = getFullPath(moduleSpecifier.text, sourceFile.fileName, program);
         const includes = importPath.includes(MODULE_NAME);
         if (includes) {
-            console.log('Found serializeExpression import path:', importPath, 'in source file:', sourceFile.fileName);
+            // console.log('Found serializeExpression import path:', importPath, 'in source file:', sourceFile.fileName);
         }
         return includes;
     }
@@ -135,9 +134,15 @@ function isSerializeExpressionFunctionImport(
     return false;
 }
 
+/**
+ * Returns true if the given TypeScript AST node is a serializeExpression function call that should be replaced with an
+ * OData `$filter` string literal.
+ * @param node The TypeScript AST node to check.
+ * @param serializeImportedAs If non-null, the name which the serializeExpression function has been imported as.
+ * @returns true if the node is a serializeExpression function call which should be parsed and replaced with an OData string.
+ */
 function isSerializeExpressionCall(node: Node, serializeImportedAs: string | null): node is CallExpression {
-
-    console.log(`isSerializeExpressionCall: Checking node ${node.getText()}, serializeImportedAs: ${serializeImportedAs}`);
+    // console.log(`isSerializeExpressionCall: Checking node ${node.getText()}, serializeImportedAs: ${serializeImportedAs}`);
     let result: boolean;
 
     if (!isCallExpression(node)) {
@@ -158,7 +163,7 @@ function isSerializeExpressionCall(node: Node, serializeImportedAs: string | nul
     }
     
     // Log the final decision of the function
-    console.log(`isSerializeExpressionCall: Result for node ${node.getText()} is ${result}`);
+    // console.log(`isSerializeExpressionCall: Result for node ${node.getText()} is ${result}`);
     return result;
 }
 
