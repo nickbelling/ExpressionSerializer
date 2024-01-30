@@ -122,4 +122,36 @@ describe("Test transformer", () => {
         const output = compile(source);
         expect(output).toContain("const result = `age gt 10`");
     });
+
+    // TODO: very complicated
+    // it('should handle the expression passing through layers of indirection', () => {
+    //     const source = `
+    //         import { serializeExpression } from './serialize';
+            
+    //         interface Person {
+    //             name: string;
+    //             age: number;
+    //         }
+            
+    //         export class Server {
+    //             public getSubscriptionId(expression: string): number {
+    //                 console.log('Expression:', expression);
+    //                 return 1234;
+    //             }
+    //         }
+
+    //         function subscribe<T>(server: Server, func: (x: T) => boolean): number {
+    //             const expression = serializeExpression(func);
+    //             return server.getSubscriptionId(expression);
+    //         }
+
+    //         const firstId: number = subscribe<Person>(p => p.age > 50);
+    //         const secondId: number = subscribe<Person>(p => p.name == 'Bob');
+    //     `;
+
+    //     const output = compile(source);
+
+    //     // idek WHAT this is gonna end up as
+    //     expect(output).toContain("age gt 50");
+    // });
 });
