@@ -1,5 +1,5 @@
 {
-  "name": "expression-serializer-ts",
+  "name": "ts-lambda-to-odata",
   "version": "0.1.0",
   "description": "Provides TypeScript transformation tools for converting typed lambda expressions such as `(x: MyType) => x.SomeProperty > 5 && x.OtherProperty == 'Blah'` at compile-time into OData `$filter` strings such as \"SomeProperty gt 5 and OtherProperty eq 'Blah'\".",
   "scripts": {

@@ -9,7 +9,7 @@ import {
 import { serializeExpression } from './../src/serialize';
 import { convertExpressionToODataString } from './serializer';
 
-const MODULE_NAME: string = 'expression-serializer-ts';
+const MODULE_NAME: string = 'ts-lambda-to-odata';
 const METHOD_NAME: string = 'serializeExpression';
 
 /**
@@ -103,7 +103,7 @@ export function serializeExpressionTransformer(program: Program): TransformerFac
         if (sourceFileModified) {
             console.log(`Modified source file '${sourceFile.fileName}' with the following replacements:`);
             modifiedDescriptions.forEach(d => {
-                console.log(`- "serializeExpression(${d[0]})" converted to OData string "${d[1]}"`);
+                console.log(`- "serializeExpression(${d[0]})" converted to OData string \`${d[1]}\``);
             });
         }
 
@@ -177,7 +177,7 @@ function getFullPath(importPath: string, currentFile: string, program: Program):
         return normalize(resolve(dirname(currentFile), importPath));
     } else {
         // For non-relative paths, we need to assume that the module name
-        // (e.g., 'expression-serializer-ts') is unique enough to identify the package
+        // (e.g., 'ts-lambda-to-odata') is unique enough to identify the package
         return importPath;
     }
 }

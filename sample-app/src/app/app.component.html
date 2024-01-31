@@ -1,0 +1,22 @@
+<h1>Angular TypeScript Expression Serializer Sample</h1>
+
+<table>
+    <thead>
+        <tr>
+            <th>Expected Expression</th>
+            <th></th>
+            <th>Result</th>
+        </tr>
+    </thead>
+    <tbody>
+        @for (test of tests; track test.expected) {
+            <tr>
+                <td><code>`{{test.expected}}`</code></td>
+                <td>
+                    @if (test.actual == test.expected) { ✅ } @else { ⛔️ }
+                </td>
+                <td><code>`{{test.actual}}`</code></td>
+            </tr>
+        }
+    </tbody>
+</table>

@@ -3,11 +3,11 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
+    "start": "npm run link && ng serve",
+    "build": "npm run link && ng build",
+    "watch": "npm run link && ng build --watch --configuration development",
     "test": "ng test",
-    "link": "cd ../expression-serializer-ts && npm run build && npm link && cd ../sample-app && npm link expression-serializer-ts",
+    "link": "cd ../ts-lambda-to-odata && npm run build && npm link && cd ../sample-app && npm link ts-lambda-to-odata",
     "reset": "npm cache clear --force && npm run link && ng build"
   },
   "private": true,

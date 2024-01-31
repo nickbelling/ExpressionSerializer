@@ -1,9 +1,15 @@
 import { Component } from '@angular/core';
-import { serializeExpression } from 'expression-serializer-ts';
+import { serializeExpression } from 'ts-lambda-to-odata';
 
 interface Person {
   name: string;
   age: number;
+}
+
+class ExpressionTest {
+  constructor(
+    public expected: string,
+    public actual: string) {}
 }
 
 declare const VERSION: string;
@@ -12,27 +18,21 @@ declare const VERSION: string;
   selector: 'app-root',
   standalone: true,
   imports: [],
-  template: `
-    <h1>Hello!</h1>
-    <h2>Expression: <code>{{expression}}</code></h2>
-
-    <ul>
-        @for (error of errors; track error) {
-            <li>{{error}}</li>
-        }
-    </ul>`
+  templateUrl: './app.component.html'
 })
 export class AppComponent {
-  public expression?: string = '';
-  public errors: any[] = [];
+  public tests: ExpressionTest[] = [];
 
   constructor() {
-    try{
-      this.expression = serializeExpression<Person>(p => p.age >= 18 && p.name.startsWith('B'));
-    } catch (error) {
-      console.error(error);
-      this.errors.push(error);
-    }
+    this.tests.push(new ExpressionTest(
+      "age ge 18 and name eq 'Bob'",
+      serializeExpression<Person>(p => p.age >= 18 && p.name == "Bob")
+    ));
+
+    this.tests.push(new ExpressionTest(
+      "startswith(name, 'B')",
+      serializeExpression<Person>(p => p.name.startsWith('B'))
+    ));
 
     console.log(this);
   }
