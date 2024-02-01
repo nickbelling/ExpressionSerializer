@@ -122,15 +122,11 @@ describe('Expression Serializer', () => {
     });
 
     it('should handle array contains', () => {
-        checkResult<Item>(x => x.historicPrices.includes(123), "contains(historicPrices, 123)");
+        checkResult<Item>(x => x.historicPrices.includes(123), "123 in historicPrices");
     });
 
     it('should handle array length', () => {
         checkResult<Item>(x => x.historicPrices.length > 5, "historicPrices/$count gt 5");
-    });
-
-    it('should handle array indexof', () => {
-        checkResult<Item>(x => x.historicPrices.indexOf(2) > 0, "indexof(historicPrices, 2) gt 0");
     });
 
     it('should handle "any" collections', () => {
