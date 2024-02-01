@@ -16,11 +16,11 @@ public record Customer
 
 public class Item
 {
-    public List<int> HistoricPrices { get; set; } = new List<int>();
+    public List<int> HistoricPrices { get; set; } = [];
 }
 
 public class Order
 {
     public required Customer Customer { get; set; }
-    public List<Item> Items { get; set; } = new List<Item>();
+    public List<Item> Items { get; set; } = [];
 }

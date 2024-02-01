@@ -1,11 +1,13 @@
 ﻿using ExpressionSerializer.Tests.Types;
+using System.Diagnostics.CodeAnalysis;
 
 namespace ExpressionSerializer.Tests;
 
 [TestClass]
+[SuppressMessage("Performance", "CA1866:Use char overload", Justification = "Testing for specifically this.")]
 public class SerializeTests
 {
-    private IExpressionSerializer _serializer = IExpressionSerializer.Current;
+    private readonly IExpressionSerializer _serializer = IExpressionSerializer.Current;
 
     [TestMethod]
     public void Test_single_conditions()
@@ -205,19 +207,19 @@ public class SerializeTests
         AssertAreEqual("Age gt 15", filter);
     }
 
-    private void AssertAreEqual(string? expected, string? actual)
+    private static void AssertAreEqual(string? expected, string? actual)
     {
         Assert.AreEqual(Normalize(expected), Normalize(actual));
     }
 
-    private string? Normalize(string? filter)
+    private static string? Normalize(string? filter)
     {
         return filter?
             .Replace(", ", ",")
             .Replace(": ", ":");
     }
 
-    private int GetNumber(int number)
+    private static int GetNumber(int number)
     {
         return number;
     }

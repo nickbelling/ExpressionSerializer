@@ -5,14 +5,14 @@ namespace ExpressionSerializer.Tests;
 [TestClass]
 public class DeserializeTests
 {
-    private IExpressionSerializer _serializer = IExpressionSerializer.Current;
+    private readonly IExpressionSerializer _serializer = IExpressionSerializer.Current;
 
-    private Person _person1 = new() { Name = "Alice", Age = 25 };
-    private Person _person2 = new() { Name = "Bob", Age = 18 };
-    private Person _person3 = new() { Name = "Charlie", Age = 20 };
+    private readonly Person _person1 = new() { Name = "Alice", Age = 25 };
+    private readonly Person _person2 = new() { Name = "Bob", Age = 18 };
+    private readonly Person _person3 = new() { Name = "Charlie", Age = 20 };
 
-    private Customer _customer1 = new() { CustomerId = 123, Person = new Person { Name = "Bob", Age = 20 } };
-    private Order _order1 = new()
+    private readonly Customer _customer1 = new() { CustomerId = 123, Person = new Person { Name = "Bob", Age = 20 } };
+    private readonly Order _order1 = new()
     { 
         Customer = new Customer { Person = new Person { Name = "Alice", Age = 30 } },
         Items = [new() { HistoricPrices = [100, 200, 300] }]

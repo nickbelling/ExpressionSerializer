@@ -40,7 +40,7 @@ public class ExpressionSerializer : IExpressionSerializer
         return ExpressionToFunc<T>(expression);
     }
 
-    private NotSupportedException HandleSerializeGotchas(NotSupportedException ex)
+    private static NotSupportedException HandleSerializeGotchas(NotSupportedException ex)
     {
         if (ex.Message.Contains("IndexOf"))
         {
@@ -51,7 +51,7 @@ public class ExpressionSerializer : IExpressionSerializer
         return ex;
     }
 
-    private IEdmModel GetModel<T>() where T : class
+    private static IEdmModel GetModel<T>() where T : class
     {
         ODataModelBuilder model = new ODataConventionModelBuilder();
         model.AddComplexType(typeof(T));
@@ -73,7 +73,7 @@ public class ExpressionSerializer : IExpressionSerializer
         return parser.ParseFilter();
     }
 
-    private Expression BindFilter(IEdmModel model, FilterClause filterClause, Type elementType, ODataQuerySettings querySettings)
+    private static Expression BindFilter(IEdmModel model, FilterClause filterClause, Type elementType, ODataQuerySettings querySettings)
     {
         FilterBinder binder = new();
         QueryBinderContext context = new(model, querySettings, elementType)
