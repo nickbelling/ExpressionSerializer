@@ -1,84 +1,104 @@
-﻿using Microsoft.OData.Edm;
-using Microsoft.OData.ModelBuilder;
-using Microsoft.OData.UriParser;
+using System.Linq.Expressions;
+using System.Web;
 using Microsoft.AspNetCore.OData.Query;
 using Microsoft.AspNetCore.OData.Query.Expressions;
-using System.Linq.Expressions;
-using Microsoft.Rest.Azure.OData;
+using Microsoft.OData.Client;
+using Microsoft.OData.Edm;
+using Microsoft.OData.ModelBuilder;
+using Microsoft.OData.UriParser;
 
 namespace ExpressionSerializer;
-public class ExpressionSerializer
+
+public class ExpressionSerializer : IExpressionSerializer
 {
-    public string? Serialize<T>(Expression<Func<T, bool>> expression)
+    public string? Serialize<T>(Expression<Func<T, bool>> expression) where T : class
     {
-        UrlExpressionVisitor visitor = new(expression.Parameters.First());
-        visitor.Visit(expression);
-        return visitor.ToString();
+        try
+        {
+            DataServiceContext context = new(new Uri("http://localhost"));
+            DataServiceQuery<T>? query = context.CreateQuery<T>(typeof(T).Name).Where(expression) as DataServiceQuery<T>;
+            Uri? queryUri = query?.RequestUri;
+            string? filterString = HttpUtility.ParseQueryString(queryUri!.Query).Get("$filter");
+            return filterString;
+        }
+        catch (NotSupportedException ex)
+        {
+            ex = HandleSerializeGotchas(ex);
+            throw ex;
+        }
     }
 
-    public Func<T, bool> Deserialize<T>(string filterString) where T : class
+    public Func<T, bool> Deserialize<T>(string filter) where T : class
     {
-        // Generate EDM model for type T
-        IEdmModel model = GenerateEdmModel<T>();
+        Type elementType = typeof(T);
+        IEdmModel model = GetModel<T>();
+        FilterClause filterClause = CreateFilterClause(filter, model, elementType);
+        
+        ODataQuerySettings querySettings = new();
+        Expression expression = BindFilter(model, filterClause, elementType, querySettings);
 
-        // Get the EDM type for the entity
-        IEdmEntityType? edmType = model.FindDeclaredType(typeof(T).FullName) as IEdmEntityType;
-        IEdmEntitySet edmNavigationSource = model.EntityContainer.FindEntitySet(typeof(T).Name);
+        return ExpressionToFunc<T>(expression);
+    }
 
-        // Parse the OData filter string
+    private NotSupportedException HandleSerializeGotchas(NotSupportedException ex)
+    {
+        if (ex.Message.Contains("IndexOf"))
+        {
+            ex = new NotSupportedException(
+                $"The string IndexOf(char) method is unsupported. Please use the IndexOf(string) method instead.", ex);
+        }
+
+        return ex;
+    }
+
+    private IEdmModel GetModel<T>() where T : class
+    {
+        ODataModelBuilder model = new ODataConventionModelBuilder();
+        model.AddComplexType(typeof(T));
+        IEdmModel value = model.GetEdmModel();
+
+        return value;
+    }
+
+    private static FilterClause CreateFilterClause(string filter, IEdmModel model, Type type)
+    {
+        IEdmType entityType = model.SchemaElements.OfType<IEdmType>().Single(t => t.FullTypeName() == type.FullName);
+
         ODataQueryOptionParser parser = new(
             model,
-            edmType,
-            edmNavigationSource,
-            new Dictionary<string, string> { { "$filter", filterString } });
-        FilterClause filterClause = parser.ParseFilter();
+            entityType,
+            null,
+            new Dictionary<string, string> { { "$filter", filter } });
 
-        // Create ODataQuerySettings and QueryBinderContext
-        ODataQuerySettings querySettings = new();
-        QueryBinderContext context = new(model, querySettings, typeof(T));
+        return parser.ParseFilter();
+    }
 
-        // Use FilterBinder to bind the filter clause to a LINQ expression
+    private Expression BindFilter(IEdmModel model, FilterClause filterClause, Type elementType, ODataQuerySettings querySettings)
+    {
         FilterBinder binder = new();
-        Expression expression = binder.Bind(filterClause.Expression, context);
-
-        // "expression" is a logical binary expression now, which is close. We need to make a lambda.
-        // First, find the 
-        ParameterExpression parameter = GetParameterExpression(expression, true);
-        Expression<Func<T, bool>> lambda = Expression.Lambda<Func<T, bool>>(expression, parameter);
-
-        return lambda.Compile();
-    }
-
-    private static IEdmModel GenerateEdmModel<T>() where T : class
-    {
-        ODataConventionModelBuilder builder = new();
-        EntityTypeConfiguration entity = builder.AddEntityType(typeof(T));
-        entity.HasKey(typeof(T).GetProperties().First());
-        builder.AddEntitySet(typeof(T).Name, entity);
-        return builder.GetEdmModel();
-    }
-
-    private static ParameterExpression? GetParameterExpression(Expression expression, bool isRoot = true)
-    {
-        switch (expression)
+        QueryBinderContext context = new(model, querySettings, elementType)
         {
-            case MemberExpression memberExpression:
-                return GetParameterExpression(memberExpression.Expression, false);
+            //AssembliesResolver = resolver ?? AssemblyResolverHelper.Default,
+        };
 
-            case BinaryExpression binaryExpression:
-                // Check the left side first, then the right side
-                ParameterExpression? leftParameter = GetParameterExpression(binaryExpression.Left, false);
-                return leftParameter ?? GetParameterExpression(binaryExpression.Right, false);
+        return binder.BindFilter(filterClause, context);
+    }
 
-            case ParameterExpression parameterExpression:
-                return parameterExpression;
-
-            case UnaryExpression unaryExpression:
-                return GetParameterExpression(unaryExpression.Operand, false);
-
-            default:
-                if (isRoot) throw new InvalidOperationException("Unable to find parameter expression.");
-                else return null;
+    public static Func<T, bool> ExpressionToFunc<T>(Expression expression) where T : class
+    {
+        // Ensure the expression is a LambdaExpression
+        if (expression is not LambdaExpression lambda)
+        {
+            throw new InvalidOperationException("The provided expression is not a lambda expression.");
         }
+
+        // Ensure the lambda expression is of the correct delegate type
+        if (!typeof(Func<T, bool>).IsAssignableFrom(lambda.Type))
+        {
+            throw new InvalidOperationException("The lambda expression does not match the required delegate type 'Func<T, bool>'.");
+        }
+
+        // Compile the lambda expression to a Func<T, bool>
+        return (Func<T, bool>)lambda.Compile();
     }
 }

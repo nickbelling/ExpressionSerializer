@@ -11,4 +11,16 @@ public record Customer
 {
     public int CustomerId { get; init; }
     public required Person Person { get; init; }
+    public bool IsActive { get; init; }
+}
+
+public class Item
+{
+    public List<int> HistoricPrices { get; set; } = new List<int>();
+}
+
+public class Order
+{
+    public required Customer Customer { get; set; }
+    public List<Item> Items { get; set; } = new List<Item>();
 }
