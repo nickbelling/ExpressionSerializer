@@ -126,7 +126,7 @@ describe('Expression Serializer', () => {
     });
 
     it('should handle array length', () => {
-        checkResult<Item>(x => x.historicPrices.length > 5, "length(historicPrices) gt 5");
+        checkResult<Item>(x => x.historicPrices.length > 5, "historicPrices/$count gt 5");
     });
 
     it('should handle array indexof', () => {
@@ -146,6 +146,6 @@ describe('Expression Serializer', () => {
     });
 
     it('should handle "any" expressions with function calls', () => {
-        checkResult<Customer>(x => x.orders.some(o => o.items.length > 1), "orders/any(o: length(o/items) gt 1)");
+        checkResult<Customer>(x => x.orders.some(o => o.items.length > 1), "orders/any(o: o/items/$count gt 1)");
     });
 });
