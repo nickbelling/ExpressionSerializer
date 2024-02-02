@@ -3,12 +3,10 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "npm run link && ng serve",
-    "build": "npm run link && ng build",
-    "watch": "npm run link && ng build --watch --configuration development",
-    "test": "ng test",
-    "link": "cd ../ts-lambda-to-odata && npm run build && npm link && cd ../sample-app && npm link ts-lambda-to-odata",
-    "reset": "npm cache clear --force && npm run link && ng build"
+    "start": "ng serve",
+    "build": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test"
   },
   "private": true,
   "dependencies": {
@@ -24,6 +22,7 @@
     "zone.js": "~0.14.3"
   },
   "devDependencies": {
+    "ts-lambda-to-odata": "0.1.0",
     "@angular-builders/custom-webpack": "^17.0.0",
     "@angular/cli": "^17.1.0",
     "@angular/compiler-cli": "^17.1.0",

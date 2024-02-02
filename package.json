@@ -1,0 +1,17 @@
+{
+    "name": "expression-serializer",
+    "private": true,
+    "workspaces": [
+        "./src/typescript/ts-lambda-to-odata",
+        "./src/typescript/sample-app"
+    ],
+    "scripts": {
+        "build:library": "npm run build --workspace=ts-lambda-to-odata",
+        "test:library": "npm test --workspace=ts-lambda-to-odata",
+        "build:sample": "npm run build --workspace=sample-app",
+        "start:sample": "npm run start --workspace=sample-app",
+        "build": "npm run build:library && npm run build:sample",
+        "start": "npm run build:library && npm run start:sample",
+        "test": "npm run test:library"
+    }
+}

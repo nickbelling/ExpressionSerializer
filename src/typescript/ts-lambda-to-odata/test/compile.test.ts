@@ -28,7 +28,7 @@ describe("Test transformer", () => {
 
     it("should handle binary comparisons", () => {
         const source = `
-            import { serializeExpression } from './serialize';
+            import { serializeExpression } from 'ts-lambda-to-odata/build-tools';
             const result = serializeExpression(x => x.age > 10);
         `;
         const output = compile(source);
@@ -37,7 +37,7 @@ describe("Test transformer", () => {
 
     it("should handle variables", () => {
         const source = `
-            import { serializeExpression } from './serialize';
+            import { serializeExpression } from 'ts-lambda-to-odata/build-tools';
             const num: number = 30;
             const result = serializeExpression(x => x.age > num);`;
         const output = compile(source);
@@ -48,7 +48,7 @@ describe("Test transformer", () => {
 
     it("should handle function calls", () => {
         const source = `
-            import { serializeExpression } from './serialize';
+            import { serializeExpression } from 'ts-lambda-to-odata/build-tools';
             function someFunction(num: number): number {
                 return num;
             }
@@ -61,7 +61,7 @@ describe("Test transformer", () => {
 
     it('should handle collections', () => {
         const source = `
-            import { serializeExpression } from './serialize';
+            import { serializeExpression } from 'ts-lambda-to-odata/build-tools';
             function someFunction(num: number): number {
                 return num;
             }
@@ -75,7 +75,7 @@ describe("Test transformer", () => {
 
     it('should handle type information in the arrow function', () => {
         const source = `
-            import { serializeExpression } from './serialize';
+            import { serializeExpression } from 'ts-lambda-to-odata/build-tools';
             interface Person {
                 name: string;
                 age: number;
@@ -90,7 +90,7 @@ describe("Test transformer", () => {
 
     it('should handle different formatting styles in the arrow function', () => {
         const source = `
-            import { serializeExpression } from './serialize';
+            import { serializeExpression } from 'ts-lambda-to-odata/build-tools';
             interface Person {
                 name: string;
                 age: number;
@@ -107,7 +107,7 @@ describe("Test transformer", () => {
 
     it('should handle function aliasing', () => {
         const source = `
-            import { serializeExpression as se } from './serialize';
+            import { serializeExpression as se } from 'ts-lambda-to-odata/build-tools';
             const result = se(x => x.age > 10);
         `;
         const output = compile(source);
@@ -116,7 +116,7 @@ describe("Test transformer", () => {
 
     it('should handle module aliasing', () => {
         const source = `
-            import * as se from './serialize';
+            import * as se from 'ts-lambda-to-odata/build-tools';
             const result = se.serializeExpression(x => x.age > 10);
         `;
         const output = compile(source);
