@@ -1,1 +1,3 @@
-{}
+{
+    "jest.rootPath": "./src/typescript/ts-lambda-to-odata"
+}

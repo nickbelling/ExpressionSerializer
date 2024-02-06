@@ -8,23 +8,24 @@ import {
 } from "typescript";
 import { serializeExpressionTransformer } from "./../build-tools/transformer";
 
+function compile(source: string): string {
+    const sourceFile = createSourceFile(
+        "test.ts",
+        source,
+        ScriptTarget.Latest,
+        true,
+        ScriptKind.TS
+        );
+
+    const result = transform(sourceFile, [
+        serializeExpressionTransformer(createProgram(["test.ts"], {})),
+    ]);
+
+    const printer = createPrinter();
+    return printer.printFile(result.transformed[0]);
+}
+
 describe("Test transformer", () => {
-    function compile(source: string): string {
-        const sourceFile = createSourceFile(
-            "test.ts",
-            source,
-            ScriptTarget.Latest,
-            true,
-            ScriptKind.TS
-            );
-
-        const result = transform(sourceFile, [
-            serializeExpressionTransformer(createProgram(["test.ts"], {})),
-        ]);
-
-        const printer = createPrinter();
-        return printer.printFile(result.transformed[0]);
-    }
 
     it("should handle binary comparisons", () => {
         const source = `
