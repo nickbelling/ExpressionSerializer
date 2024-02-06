@@ -78,7 +78,9 @@ export function serializeExpressionTransformer(program: Program): TransformerFac
                     // Assuming the first argument to serializeExpression is the lambda expression we want to parse
                     const firstArgument: Expression = node.arguments[0];
                     if (firstArgument && firstArgument.kind == SyntaxKind.ArrowFunction) {
-                        const lambdaString: string = firstArgument.getText();
+                        const lambdaString: string = firstArgument
+                            .getText()
+                            .replace(/\s+/g, ' '); // remove extraneous whitespace
                         const odataString: string = 
                             convertExpressionToODataString(
                                 firstArgument as ArrowFunction, typeChecker);
@@ -101,7 +103,6 @@ export function serializeExpressionTransformer(program: Program): TransformerFac
         const transformedSourceFile = visitNode(sourceFile, visitor);
 
         if (sourceFileModified) {
-            console.log(`Modified source file '${sourceFile.fileName}' with the following replacements:`);
             modifiedDescriptions.forEach(d => {
                 console.log(`- "serializeExpression(${d[0]})" converted to OData string \`${d[1]}\``);
             });
@@ -118,15 +119,16 @@ export function serializeExpressionTransformer(program: Program): TransformerFac
 function isSerializeExpressionFunctionImport(
     importDeclaration: ImportDeclaration,
     sourceFile: SourceFile,
-    program: Program
+    program: Program,
+    debugOutput: boolean = false
 ): boolean {
     const moduleSpecifier = importDeclaration.moduleSpecifier;
 
     if (isStringLiteral(moduleSpecifier)) {
         const importPath = getFullPath(moduleSpecifier.text, sourceFile.fileName, program);
         const includes = importPath.includes(MODULE_NAME);
-        if (includes) {
-            // console.log('Found serializeExpression import path:', importPath, 'in source file:', sourceFile.fileName);
+        if (debugOutput) {
+            console.log('Found serializeExpression import path:', importPath, 'in source file:', sourceFile.fileName);
         }
         return includes;
     }
@@ -141,7 +143,10 @@ function isSerializeExpressionFunctionImport(
  * @param serializeImportedAs If non-null, the name which the serializeExpression function has been imported as.
  * @returns true if the node is a serializeExpression function call which should be parsed and replaced with an OData string.
  */
-function isSerializeExpressionCall(node: Node, serializeImportedAs: string | null): node is CallExpression {
+function isSerializeExpressionCall(
+    node: Node,
+    serializeImportedAs: string | null,
+    debugOutput: boolean = false): node is CallExpression {
     // console.log(`isSerializeExpressionCall: Checking node ${node.getText()}, serializeImportedAs: ${serializeImportedAs}`);
     let result: boolean;
 
@@ -162,8 +167,9 @@ function isSerializeExpressionCall(node: Node, serializeImportedAs: string | nul
         }
     }
     
-    // Log the final decision of the function
-    // console.log(`isSerializeExpressionCall: Result for node ${node.getText()} is ${result}`);
+    if (debugOutput) {
+        console.log(`isSerializeExpressionCall: Result for node ${node.getText()} is ${result}`);
+    }
     return result;
 }
 

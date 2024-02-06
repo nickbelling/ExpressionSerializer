@@ -41,8 +41,6 @@ describe("Test transformer", () => {
             const num: number = 30;
             const result = serializeExpression(x => x.age > num);`;
         const output = compile(source);
-
-        console.log('Transformed output:\n', output);
         expect(output).toContain("const result = `age gt ${num}`");
     });
 

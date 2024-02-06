@@ -1,6 +1,6 @@
 import {
     ArrowFunction, CallExpression, CompilerHost, createProgram, createSourceFile, forEachChild,
-    Identifier, isArrowFunction, isFunctionExpression, Node, NumericLiteral,
+    Identifier, isArrowFunction, isFunctionExpression, LeftHandSideExpression, MemberName, Node, NumericLiteral,
     ParenthesizedExpression, PrefixUnaryExpression, PropertyAccessExpression, ScriptTarget,
     StringLiteral, SyntaxKind, TypeChecker
 } from 'typescript';
@@ -88,14 +88,39 @@ export function convertExpressionToODataString(
         } else if (node.kind === SyntaxKind.PropertyAccessExpression) {
             // Property access
             const propertyAccess = node as PropertyAccessExpression;
-            const object = propertyAccess.expression;
-            const property = propertyAccess.name;
+            const object: LeftHandSideExpression = propertyAccess.expression;
+            const property: MemberName = propertyAccess.name;
 
             if (property.text === 'length') {
-                // Special handling for 'length' property on a string/array, which in OData becomes a "length()"
-                // function call
+                // Special handling for 'length' property on a string/array, which in OData becomes a "length(property)"
+                // function call for a string, and "property/$count" for an array
                 const objectText = getNestedPropertyName(object, lambdaParameter, includeIdentifier);
-                odataFilter += `length(${objectText})`;
+
+                const objectType = typeChecker.getTypeAtLocation(object);
+                const objectSymbol = objectType.getSymbol();
+                const typeAsString = typeChecker.typeToString(objectType);
+        
+                // Initialize isString as false
+                let isString: boolean = false;
+        
+                // Check if the object type is a string
+                if (typeAsString === 'string') {
+                    isString = true;
+                } else {
+                    // Check for array types, considering both explicit arrays and ReadonlyArray<T>
+                    const isArray = objectType.getNumberIndexType() !== undefined ||
+                                     typeChecker.isArrayType(objectType) ||
+                                     typeChecker.isTupleType(objectType) ||
+                                     (objectSymbol && typeChecker.getFullyQualifiedName(objectSymbol) === 'Array');
+        
+                    isString = !isArray; // If it's not an array, we assume it's a string for simplicity
+                }
+                
+                if (isString) {
+                    odataFilter += `length(${objectText})`;
+                } else {
+                    odataFilter += `${objectText}/$count`;
+                }
             } else {
                 // Handling for other property access expressions
                 if (object.kind === SyntaxKind.Identifier && (object as Identifier).text === lambdaParameter) {
@@ -185,76 +210,6 @@ export function convertExpressionToODataString(
     forEachChild(expression, visitNode);
 
     return odataFilter;
-}
-
-/**
- * Given a function that accepts an argument of type T and returns a boolean (i.e. a filter function), converts it into
- * a matching OData `$filter` string.
- * 
- * Note that this must be called in non-minified TypeScript code for the optimal effect, i.e. during the build process.
- * Using this in a live JavaScript web environment will have unpredictable results.
- */
-export function convertFuncToODataString<T>(func: (x: T) => boolean): string {
-    const parsed: ParsedExpression = parseFunctionToArrowFunctionExpression(func);
-    if (parsed.expression) {
-        return convertExpressionToODataString(parsed.expression, parsed.typeChecker);
-    } else {
-        throw new Error(`Could not parse input "${func.toString()}" as an Expression.`);
-    }
-}
-
-/**
- * Given an {@link ArrowFunction}, parses it into a {@link ParsedExpression}.
- * @param fn 
- * @returns 
- */
-function parseFunctionToArrowFunctionExpression<T>(fn: (x: T) => boolean): ParsedExpression {
-    const functionString = fn.toString();
-    const sourceFile = createSourceFile(
-        'tempFile.ts',
-        functionString,
-        ScriptTarget.Latest,
-        true /* setParentNodes */
-    );
-
-    const host: CompilerHost = {
-        getSourceFile: (fileName) => fileName === 'tempFile.ts' ? sourceFile : undefined,
-        getDefaultLibFileName: () => 'lib.d.ts',
-        writeFile: () => { },
-        getCurrentDirectory: () => '/',
-        getDirectories: () => [],
-        getCanonicalFileName: fileName => fileName,
-        useCaseSensitiveFileNames: () => true,
-        getNewLine: () => '\n',
-        fileExists: fileName => fileName === 'tempFile.ts',
-        readFile: () => '',
-        directoryExists: () => true,
-        getEnvironmentVariable: () => ''
-    };
-
-    const program = createProgram(
-        ['tempFile.ts'],
-        {
-            noResolve: true,
-            target: ScriptTarget.Latest
-        }, host);
-    const typeChecker = program.getTypeChecker();
-
-    // Traverse the AST to find the ArrowFunction
-    let arrowFunctionNode: ArrowFunction | null = null;
-    function visit(node: Node) {
-        if (isArrowFunction(node)) {
-            arrowFunctionNode = node as ArrowFunction;
-        } else {
-            forEachChild(node, visit);
-        }
-    }
-    forEachChild(sourceFile, visit);
-
-    return {
-        expression: arrowFunctionNode,
-        typeChecker: typeChecker
-    };
 }
 
 /**
@@ -472,7 +427,7 @@ function processMethodCall(methodName: string, propertyName: string, args: strin
         case 'endsWith':
             return `endswith(${propertyName}, ${args})`;
         case 'includes':
-            return `contains(${propertyName}, ${args})`;
+            return `${args} in (${propertyName})`;
         case 'indexOf':
             return `indexof(${propertyName}, ${args})`;
         case 'substring':
